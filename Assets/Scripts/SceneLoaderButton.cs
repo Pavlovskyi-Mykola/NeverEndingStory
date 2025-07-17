@@ -2,10 +2,12 @@ using UnityEngine;
 
 public class SceneLoaderButton : MonoBehaviour
 {
-    public SceneReference targetScene;
+    [SerializeField] private SceneType sceneToLoad;
 
-    public void Load()
+    public void LoadSceneAsync()
     {
-        LevelManager.Instance.LoadScene(targetScene.SceneName);
+        var sceneDatabase = SceneManager.Instance.sceneDatabase;
+        SceneReference sceneRef = sceneDatabase.GetScene(sceneToLoad);
+        SceneManager.Instance.LoadSceneAsync(sceneRef);
     }
 }
