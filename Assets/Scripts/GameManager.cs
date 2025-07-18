@@ -1,22 +1,15 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
-
-    public event Action<string> OnSceneLoaded = delegate { };
-    public event Action<string> OnSceneUnloaded = delegate { };
+    public event Action<SceneReference> OnSceneLoaded = delegate { };
 
     [Header("Scene Data")]
     public SceneDatabase sceneDatabase;
-
-    private SceneReference _currentActiveScene;
 
     private void Awake()
     {
@@ -29,16 +22,29 @@ public class GameManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        _currentActiveScene = sceneDatabase.MainMenu;
     }
 
     public void LoadScene (SceneReference sceneToLoad)
     {
-        SceneManager.LoadScene(sceneToLoad.SceneName);
-        //SceneManager.SetActiveScene(SceneManager.GetSceneByName(sceneToLoad.SceneName));
+        if (IsSceneLoaded(sceneToLoad.SceneName))
+            return;
 
-        OnSceneLoaded?.Invoke(sceneToLoad.SceneName);
+        SceneManager.LoadScene(sceneToLoad.SceneName);
+
+        OnSceneLoaded?.Invoke(sceneToLoad);
     }
+
+    private bool IsSceneLoaded(string sceneName)
+    {
+        for (int i = 0; i < SceneManager.sceneCount; i++)
+        {
+            var loadedScene = SceneManager.GetSceneAt(i);
+            if (loadedScene.name == sceneName)
+                return true;
+        }
+        return false;
+    }
+
 }
 
 
