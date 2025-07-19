@@ -1,15 +1,25 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
+using NUnit.Framework;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
     public event Action<SceneReference> OnSceneLoaded = delegate { };
+    public event Action<SceneReference> OnSceneUnLoaded = delegate { };
+
+    private List<AsyncOperation> _scenesToLoad = new();
 
     [Header("Scene Data")]
     public SceneDatabase sceneDatabase;
+
+    //move this later
+    public GameObject loadingInterface;
 
     private void Awake()
     {
@@ -24,25 +34,62 @@ public class GameManager : MonoBehaviour
 
     }
 
-    public void LoadScene (SceneReference sceneToLoad)
+    public async void StartGame()
     {
-        if (IsSceneLoaded(sceneToLoad.SceneName))
-            return;
+        ShowLoadingScreen(true);
 
-        SceneManager.LoadScene(sceneToLoad.SceneName);
+        LoadSceneAsync(sceneDatabase.TutorialArea);
 
+        while (_scenesToLoad.Count > 0)
+            await Task.Yield();
+
+        UnloadSceneAsync(sceneDatabase.MainMenu);
+        ShowLoadingScreen(false);
+    }
+
+    private void ShowLoadingScreen(bool OnOff)
+    {
+        loadingInterface.SetActive(OnOff);
+    }
+
+    public async void LoadSceneAsync(SceneReference sceneToLoad)
+    {
+        var asyncOperation = SceneManager.LoadSceneAsync(sceneToLoad.SceneName, LoadSceneMode.Additive);
+        _scenesToLoad.Add(asyncOperation);
+        while (!asyncOperation.isDone)
+            await Task.Yield();
+
+        _scenesToLoad.Remove(asyncOperation);
         OnSceneLoaded?.Invoke(sceneToLoad);
     }
 
-    private bool IsSceneLoaded(string sceneName)
+    public async void UnloadSceneAsync(SceneReference sceneRef)
     {
-        for (int i = 0; i < SceneManager.sceneCount; i++)
+
+        var asyncOperation = SceneManager.UnloadSceneAsync(sceneRef.SceneName);
+        while (!asyncOperation.isDone)
+            await Task.Yield();
+
+        OnSceneUnLoaded?.Invoke(sceneRef);
+    }
+
+    public float TotalLoadingProgress
+    {
+        get
         {
-            var loadedScene = SceneManager.GetSceneAt(i);
-            if (loadedScene.name == sceneName)
-                return true;
+            if (_scenesToLoad.Count == 0) return 1f;
+            float total = 0f;
+            foreach (var op in _scenesToLoad)
+            {
+                total += Mathf.Clamp01(op.progress / 0.9f); // Normalize
+            }
+            return total / _scenesToLoad.Count;
         }
-        return false;
+    }
+
+    public void ExitGame()
+    {
+        Application.Quit();
     }
 
 }
