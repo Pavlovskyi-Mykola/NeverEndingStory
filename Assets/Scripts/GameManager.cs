@@ -11,6 +11,11 @@ public class GameManager : MonoBehaviour
     [Header("Database")]
     [SerializeField] private SceneDatabase sceneDatabase;
 
+    [Header("Startup")]
+    [SerializeField] private bool loadUIOnStart = true;
+    [SerializeField] private bool loadMainMenuOnStart = true;
+    public string CurrentLocation { get; private set; }
+
     // Track loaded scenes by name
     private readonly HashSet<string> _loaded = new HashSet<string>();
 
@@ -31,6 +36,16 @@ public class GameManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         CacheAlreadyLoadedScenes();
+    }
+
+    private async void Start()
+    {
+        // Start() runs after Awake() and after first scene is loaded.
+        if (loadUIOnStart && sceneDatabase != null && sceneDatabase.UI != null && sceneDatabase.UI.IsValid)
+            await Load(sceneDatabase.UI, setActive: false);
+
+        if (loadMainMenuOnStart && sceneDatabase != null && sceneDatabase.MainMenu != null && sceneDatabase.MainMenu.IsValid)
+            await Load(sceneDatabase.MainMenu, setActive: true);
     }
 
     private void CacheAlreadyLoadedScenes()
@@ -174,5 +189,18 @@ public class GameManager : MonoBehaviour
             if (s != null && s.IsValid && s.SceneName != target.SceneName)
                 await Unload(s);
         }
+    }
+
+    public async Task SwitchLocation(SceneReference targetLocation)
+    {
+        if (targetLocation == null || !targetLocation.IsValid)
+            return;
+
+        // unload previous location if any
+        if (!string.IsNullOrEmpty(CurrentLocation))
+            await Unload(CurrentLocation);
+
+        await Load(targetLocation, setActive: true);
+        CurrentLocation = targetLocation.SceneName;
     }
 }

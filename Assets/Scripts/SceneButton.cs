@@ -1,24 +1,11 @@
 using UnityEngine;
 
-public class SceneButton : MonoBehaviour
+public class LocationButton : MonoBehaviour
 {
-    [Header("Target Scene")]
-    [SerializeField] private SceneReference targetScene;
+    [SerializeField] private SceneReference targetLocation;
 
-    [Header("Optional unload")]
-    [SerializeField] private SceneReference[] scenesToUnload;
-
-    public void LoadScene()
+    public void SwitchScene()
     {
-        if (targetScene == null || !targetScene.IsValid)
-        {
-            Debug.LogError($"{name}: Target scene is not set.");
-            return;
-        }
-
-        _ = GameManager.Instance.SwitchTo(
-            targetScene,
-            scenesToUnload
-        );
+        _ = GameManager.Instance.SwitchLocation(targetLocation);
     }
 }
