@@ -5,9 +5,5 @@ using UnityEngine;
 public class SceneDatabase : ScriptableObject
 {
     public SceneReference MainMenu;
-    public SceneReference TutorialArea;
-    public SceneReference Neighbourhood;
-    public SceneReference Cafe;
-    public SceneReference Park;
-
+    public SceneReference Home;
 }
