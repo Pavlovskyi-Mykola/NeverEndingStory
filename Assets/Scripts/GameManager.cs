@@ -46,6 +46,7 @@ public class GameManager : MonoBehaviour
 
         if (loadMainMenuOnStart && sceneDatabase != null && sceneDatabase.MainMenu != null && sceneDatabase.MainMenu.IsValid)
             await Load(sceneDatabase.MainMenu, setActive: true);
+            CurrentLocation = sceneDatabase.MainMenu.SceneName;
     }
 
     private void CacheAlreadyLoadedScenes()

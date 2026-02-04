@@ -7,4 +7,6 @@ public class SceneDatabase : ScriptableObject
     public SceneReference UI;
     public SceneReference MainMenu;
     public SceneReference Home;
-}
+    public SceneReference Work_FirstFloor;
+    public SceneReference Work_SecondFloor;
+    }
