@@ -52,10 +52,16 @@ public class TimeUI : MonoBehaviour
         }
     }
 
-    // Hook this to your Button OnClick
     public void AdvanceTimeButton()
     {
         if (TimeManager.Instance == null) return;
         TimeManager.Instance.AdvancePhase();
     }
+
+    public void SleepToMorningButton()
+    {
+        if (TimeManager.Instance == null) return;
+        TimeManager.Instance.SleepToMorning();
+    }
+
 }

@@ -68,4 +68,14 @@ public class TimeManager : MonoBehaviour
         int next = ((int)day + 1) % 7;
         return (DayOfWeek)next;
     }
+
+    public void SleepToMorning()
+    {
+        // Sleep ends the day -> next day morning
+        phase = DayPhase.Morning;
+        dayOfWeek = NextDay(dayOfWeek);
+
+        RaiseTimeChanged();
+    }
+
 }
