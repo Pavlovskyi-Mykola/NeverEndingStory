@@ -31,7 +31,7 @@ public class TimeUI : MonoBehaviour
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
     }
 
-    private void HandleTimeChanged(System.DayOfWeek day, DayPhase phase)
+    private void HandleTimeChanged(System.DayOfWeek day, TimeOfDay phase)
     {
         if (DayOfWeek != null) DayOfWeek.text = day.ToString();
         if (TimeOfDay != null) TimeOfDay.text = phase.ToString();
@@ -40,14 +40,14 @@ public class TimeUI : MonoBehaviour
             TimeOfDayImage.sprite = GetSpriteForPhase(phase);
     }
 
-    private Sprite GetSpriteForPhase(DayPhase phase)
+    private Sprite GetSpriteForPhase(TimeOfDay phase)
     {
         switch (phase)
         {
-            case DayPhase.Morning: return morningSprite;
-            case DayPhase.Afternoon: return afternoonSprite;
-            case DayPhase.Evening: return eveningSprite;
-            case DayPhase.Night: return nightSprite;
+            case global::TimeOfDay.Morning: return morningSprite;
+            case global::TimeOfDay.Afternoon: return afternoonSprite;
+            case global::TimeOfDay.Evening: return eveningSprite;
+            case global::TimeOfDay.Night: return nightSprite;
             default: return null;
         }
     }

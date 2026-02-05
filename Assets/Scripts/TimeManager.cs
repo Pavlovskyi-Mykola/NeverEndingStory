@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-public enum DayPhase {Morning, Afternoon, Evening, Night}
+public enum TimeOfDay {Morning, Afternoon, Evening, Night}
 
 public class TimeManager : MonoBehaviour
 {
@@ -9,12 +9,12 @@ public class TimeManager : MonoBehaviour
 
     [Header("Current Time")]
     [SerializeField] private DayOfWeek dayOfWeek = DayOfWeek.Monday;
-    [SerializeField] private DayPhase phase = DayPhase.Morning;
+    [SerializeField] private TimeOfDay phase = TimeOfDay.Morning;
 
     public DayOfWeek DayOfWeek => dayOfWeek;
-    public DayPhase Phase => phase;
+    public TimeOfDay Phase => phase;
 
-    public event Action<DayOfWeek, DayPhase> OnTimeChanged;
+    public event Action<DayOfWeek, TimeOfDay> OnTimeChanged;
 
     private void Awake()
     {
@@ -38,11 +38,11 @@ public class TimeManager : MonoBehaviour
     {
         switch (phase)
         {
-            case DayPhase.Morning: phase = DayPhase.Afternoon; break;
-            case DayPhase.Afternoon: phase = DayPhase.Evening; break;
-            case DayPhase.Evening: phase = DayPhase.Night; break;
-            case DayPhase.Night:
-                phase = DayPhase.Morning;
+            case TimeOfDay.Morning: phase = TimeOfDay.Afternoon; break;
+            case TimeOfDay.Afternoon: phase = TimeOfDay.Evening; break;
+            case TimeOfDay.Evening: phase = TimeOfDay.Night; break;
+            case TimeOfDay.Night:
+                phase = TimeOfDay.Morning;
                 dayOfWeek = NextDay(dayOfWeek);
                 break;
         }
@@ -50,7 +50,7 @@ public class TimeManager : MonoBehaviour
         RaiseTimeChanged();
     }
 
-    public void SetTime(DayOfWeek newDay, DayPhase newPhase)
+    public void SetTime(DayOfWeek newDay, TimeOfDay newPhase)
     {
         dayOfWeek = newDay;
         phase = newPhase;
@@ -72,7 +72,7 @@ public class TimeManager : MonoBehaviour
     public void SleepToMorning()
     {
         // Sleep ends the day -> next day morning
-        phase = DayPhase.Morning;
+        phase = TimeOfDay.Morning;
         dayOfWeek = NextDay(dayOfWeek);
 
         RaiseTimeChanged();

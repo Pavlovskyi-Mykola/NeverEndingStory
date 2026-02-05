@@ -55,7 +55,7 @@ public class SceneDatabase : ScriptableObject
     ///
     /// If it IS present in Locations list, it is restricted-by-default and must explicitly allow day+phase.
     /// </summary>
-    public bool IsAllowedNow(SceneReference sceneRef, DayOfWeek day, DayPhase phase)
+    public bool IsAllowedNow(SceneReference sceneRef, DayOfWeek day, TimeOfDay phase)
     {
         if (!TryGetLocation(sceneRef, out var entry))
             return true;
@@ -76,7 +76,7 @@ public struct LocationEntry
 
     // ✅ RESTRICTED BY DEFAULT:
     // - if entry exists but masks are None => location is CLOSED
-    public bool IsAllowed(DayOfWeek day, DayPhase phase)
+    public bool IsAllowed(DayOfWeek day, TimeOfDay phase)
     {
         if (AllowedDays == DayOfWeekMask.None) return false;
         if (AllowedPhases == DayPhaseMask.None) return false;

@@ -237,7 +237,7 @@ public class GameManager : MonoBehaviour
     }
 
     // ✅ Failsafe: if current location becomes invalid after time skip -> force Home
-    private async void HandleTimeChanged(DayOfWeek day, DayPhase phase)
+    private async void HandleTimeChanged(DayOfWeek day, TimeOfDay phase)
     {
         if (_isForcingRelocation)
             return;

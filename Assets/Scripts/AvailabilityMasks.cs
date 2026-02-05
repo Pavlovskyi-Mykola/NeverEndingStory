@@ -13,14 +13,14 @@ public enum DayPhaseMask
 
 public static class DayPhaseMaskExtensions
 {
-    public static DayPhaseMask From(DayPhase phase)
+    public static DayPhaseMask From(TimeOfDay phase)
     {
         return phase switch
         {
-            DayPhase.Morning => DayPhaseMask.Morning,
-            DayPhase.Afternoon => DayPhaseMask.Afternoon,
-            DayPhase.Evening => DayPhaseMask.Evening,
-            DayPhase.Night => DayPhaseMask.Night,
+            TimeOfDay.Morning => DayPhaseMask.Morning,
+            TimeOfDay.Afternoon => DayPhaseMask.Afternoon,
+            TimeOfDay.Evening => DayPhaseMask.Evening,
+            TimeOfDay.Night => DayPhaseMask.Night,
             _ => DayPhaseMask.None
         };
     }
