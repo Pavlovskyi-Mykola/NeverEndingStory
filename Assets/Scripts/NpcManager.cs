@@ -24,23 +24,38 @@ public class NpcManager : MonoBehaviour
 
     private void OnEnable()
     {
-        // Time hook
+        GameManager.InstanceReady += HandleGameManagerReady;
+
+        // If it already exists, bind immediately
+        if (GameManager.Instance != null)
+            HandleGameManagerReady(GameManager.Instance);
+
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
-
-        // Location hook (the one we added in GameManager)
-        if (GameManager.Instance != null)
-            GameManager.Instance.LocationReady += HandleLocationReady;
     }
 
     private void OnDisable()
     {
-        if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+        GameManager.InstanceReady -= HandleGameManagerReady;
 
         if (GameManager.Instance != null)
             GameManager.Instance.LocationReady -= HandleLocationReady;
+
+        if (TimeManager.Instance != null)
+            TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
     }
+
+    private void HandleGameManagerReady(GameManager gm)
+    {
+        // avoid double subscribe
+        gm.LocationReady -= HandleLocationReady;
+        gm.LocationReady += HandleLocationReady;
+
+        // sync immediately
+        if (gm.CurrentLocationRef != null && gm.CurrentLocationRef.IsValid)
+            HandleLocationReady(gm.CurrentLocationRef);
+    }
+
 
     private void HandleLocationReady(SceneReference location)
     {

@@ -30,6 +30,7 @@ public class GameManager : MonoBehaviour
     public event Action<string> SceneUnloadCompleted;
     public event Action<SceneReference> LocationLoadStarted;
     public event Action<SceneReference> LocationReady; // <- scene loaded + active + CurrentLocationRef updated
+    public static event System.Action<GameManager> InstanceReady;
 
     private bool _isForcingRelocation;
 
@@ -44,6 +45,7 @@ public class GameManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        InstanceReady?.Invoke(this);
         CacheAlreadyLoadedScenes();
     }
 
@@ -70,7 +72,6 @@ public class GameManager : MonoBehaviour
             CurrentLocationRef = sceneDatabase.MainMenu; // ✅ set reference
         }
         LocationLoadStarted?.Invoke(CurrentLocationRef);
-        RaiseLocationReady(CurrentLocationRef);
     }
 
     private void CacheAlreadyLoadedScenes()
@@ -241,9 +242,8 @@ public class GameManager : MonoBehaviour
         // ✅ store reference
         CurrentLocationRef = targetLocation;
 
-
         // ✅ THIS is the key hook NPC system will listen to
-        RaiseLocationReady(CurrentLocationRef);
+        LocationReady?.Invoke(CurrentLocationRef);
     }
 
     // ✅ Failsafe: if current location becomes invalid after time skip -> force Home
@@ -276,10 +276,5 @@ public class GameManager : MonoBehaviour
                 _isForcingRelocation = false;
             }
         }
-    }
-    private void RaiseLocationReady(SceneReference loc)
-    {
-        if (loc == null || !loc.IsValid) return;
-        LocationReady?.Invoke(loc);
     }
 }
