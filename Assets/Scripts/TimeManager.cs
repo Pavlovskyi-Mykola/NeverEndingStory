@@ -6,6 +6,8 @@ public enum TimeOfDay {Morning, Afternoon, Evening, Night}
 public class TimeManager : MonoBehaviour
 {
     public static TimeManager Instance { get; private set; }
+    public static event System.Action<TimeManager> InstanceReady;
+
 
     [Header("Current Time")]
     [SerializeField] private DayOfWeek dayOfWeek = DayOfWeek.Monday;
@@ -26,6 +28,7 @@ public class TimeManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        InstanceReady?.Invoke(this);
     }
 
     private void Start()

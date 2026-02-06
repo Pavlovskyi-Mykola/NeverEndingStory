@@ -25,22 +25,21 @@ public class NpcManager : MonoBehaviour
     private void OnEnable()
     {
         GameManager.InstanceReady += HandleGameManagerReady;
-
-        // If it already exists, bind immediately
         if (GameManager.Instance != null)
             HandleGameManagerReady(GameManager.Instance);
 
+        TimeManager.InstanceReady += HandleTimeManagerReady;
         if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
+            HandleTimeManagerReady(TimeManager.Instance);
     }
 
     private void OnDisable()
     {
         GameManager.InstanceReady -= HandleGameManagerReady;
-
         if (GameManager.Instance != null)
             GameManager.Instance.LocationReady -= HandleLocationReady;
 
+        TimeManager.InstanceReady -= HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
     }
@@ -54,6 +53,17 @@ public class NpcManager : MonoBehaviour
         // sync immediately
         if (gm.CurrentLocationRef != null && gm.CurrentLocationRef.IsValid)
             HandleLocationReady(gm.CurrentLocationRef);
+    }
+    private void HandleTimeManagerReady(TimeManager tm)
+    {
+        // avoid double subscribe
+        tm.OnTimeChanged -= HandleTimeChanged;
+        tm.OnTimeChanged += HandleTimeChanged;
+
+        Debug.Log("[NpcManager] Subscribed to TimeManager.OnTimeChanged");
+
+        // Optional: immediate refresh using current time (good when scene loads before binding)
+        RefreshAll();
     }
 
 
@@ -70,6 +80,9 @@ public class NpcManager : MonoBehaviour
 
     private void HandleTimeChanged(System.DayOfWeek day, TimeOfDay phase)
     {
+        // Only refresh if we are currently inside a location with an active spawner
+        if (_activeSpawner == null) return;
+
         RefreshAll();
     }
 
