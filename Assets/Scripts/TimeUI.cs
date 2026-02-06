@@ -21,7 +21,7 @@ public class TimeUI : MonoBehaviour
             TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
 
             // Initial refresh
-            HandleTimeChanged(TimeManager.Instance.DayOfWeek, TimeManager.Instance.Phase);
+            HandleTimeChanged(TimeManager.Instance.DayOfWeek, TimeManager.Instance.TimeOfDay);
         }
     }
 

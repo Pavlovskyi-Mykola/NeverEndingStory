@@ -24,7 +24,7 @@ public class ActionService : MonoBehaviour
         // Phase restriction
         if (action.RestrictByPhase && TimeManager.Instance != null)
         {
-            var phase = TimeManager.Instance.Phase;
+            var phase = TimeManager.Instance.TimeOfDay;
             bool ok = false;
             for (int i = 0; i < action.AllowedPhases.Length; i++)
                 if (action.AllowedPhases[i] == phase) { ok = true; break; }

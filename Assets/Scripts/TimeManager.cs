@@ -9,10 +9,10 @@ public class TimeManager : MonoBehaviour
 
     [Header("Current Time")]
     [SerializeField] private DayOfWeek dayOfWeek = DayOfWeek.Monday;
-    [SerializeField] private TimeOfDay phase = TimeOfDay.Morning;
+    [SerializeField] private TimeOfDay timeOfDay = TimeOfDay.Morning;
 
     public DayOfWeek DayOfWeek => dayOfWeek;
-    public TimeOfDay Phase => phase;
+    public TimeOfDay TimeOfDay => timeOfDay;
 
     public event Action<DayOfWeek, TimeOfDay> OnTimeChanged;
 
@@ -36,13 +36,13 @@ public class TimeManager : MonoBehaviour
 
     public void AdvancePhase()
     {
-        switch (phase)
+        switch (timeOfDay)
         {
-            case TimeOfDay.Morning: phase = TimeOfDay.Afternoon; break;
-            case TimeOfDay.Afternoon: phase = TimeOfDay.Evening; break;
-            case TimeOfDay.Evening: phase = TimeOfDay.Night; break;
+            case TimeOfDay.Morning: timeOfDay = TimeOfDay.Afternoon; break;
+            case TimeOfDay.Afternoon: timeOfDay = TimeOfDay.Evening; break;
+            case TimeOfDay.Evening: timeOfDay = TimeOfDay.Night; break;
             case TimeOfDay.Night:
-                phase = TimeOfDay.Morning;
+                timeOfDay = TimeOfDay.Morning;
                 dayOfWeek = NextDay(dayOfWeek);
                 break;
         }
@@ -53,13 +53,13 @@ public class TimeManager : MonoBehaviour
     public void SetTime(DayOfWeek newDay, TimeOfDay newPhase)
     {
         dayOfWeek = newDay;
-        phase = newPhase;
+        timeOfDay = newPhase;
         RaiseTimeChanged();
     }
 
     private void RaiseTimeChanged()
     {
-        OnTimeChanged?.Invoke(dayOfWeek, phase);
+        OnTimeChanged?.Invoke(dayOfWeek, timeOfDay);
     }
 
     private static DayOfWeek NextDay(DayOfWeek day)
@@ -72,7 +72,7 @@ public class TimeManager : MonoBehaviour
     public void SleepToMorning()
     {
         // Sleep ends the day -> next day morning
-        phase = TimeOfDay.Morning;
+        timeOfDay = TimeOfDay.Morning;
         dayOfWeek = NextDay(dayOfWeek);
 
         RaiseTimeChanged();
