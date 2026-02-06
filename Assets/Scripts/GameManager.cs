@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -14,7 +14,12 @@ public class GameManager : MonoBehaviour
     [Header("Startup")]
     [SerializeField] private bool loadUIOnStart = true;
     [SerializeField] private bool loadMainMenuOnStart = true;
-    public string CurrentLocation { get; private set; }
+
+    // ✅ Current location as reference (single source of truth)
+    public SceneReference CurrentLocationRef { get; private set; }
+
+    // ✅ Convenience: scene name (read-only)
+    public string CurrentLocation => CurrentLocationRef != null ? CurrentLocationRef.SceneName : null;
 
     // Track loaded scenes by name
     private readonly HashSet<string> _loaded = new HashSet<string>();
@@ -23,6 +28,8 @@ public class GameManager : MonoBehaviour
     public event Action<string> SceneLoadCompleted;
     public event Action<string> SceneUnloadStarted;
     public event Action<string> SceneUnloadCompleted;
+
+    private bool _isForcingRelocation;
 
     private void Awake()
     {
@@ -38,15 +45,28 @@ public class GameManager : MonoBehaviour
         CacheAlreadyLoadedScenes();
     }
 
+    private void OnEnable()
+    {
+        if (TimeManager.Instance != null)
+            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
+    }
+
+    private void OnDisable()
+    {
+        if (TimeManager.Instance != null)
+            TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+    }
+
     private async void Start()
     {
-        // Start() runs after Awake() and after first scene is loaded.
         if (loadUIOnStart && sceneDatabase != null && sceneDatabase.UI != null && sceneDatabase.UI.IsValid)
             await Load(sceneDatabase.UI, setActive: false);
 
         if (loadMainMenuOnStart && sceneDatabase != null && sceneDatabase.MainMenu != null && sceneDatabase.MainMenu.IsValid)
+        {
             await Load(sceneDatabase.MainMenu, setActive: true);
-            CurrentLocation = sceneDatabase.MainMenu.SceneName;
+            CurrentLocationRef = sceneDatabase.MainMenu; // ✅ set reference
+        }
     }
 
     private void CacheAlreadyLoadedScenes()
@@ -81,7 +101,6 @@ public class GameManager : MonoBehaviour
 
         if (_loaded.Contains(sceneName))
         {
-            // Already loaded; optionally set active
             if (setActive)
                 SetActive(sceneName);
             return;
@@ -98,7 +117,6 @@ public class GameManager : MonoBehaviour
 
         op.allowSceneActivation = true;
 
-        // Wait until done
         while (!op.isDone)
             await Task.Yield();
 
@@ -131,10 +149,9 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Don�t let Unity unload the active scene without switching away first
+        // Don't unload the active scene without switching away first
         if (SceneManager.GetActiveScene().name == sceneName)
         {
-            // Pick any other loaded scene as fallback (or your bootstrap)
             foreach (var s in _loaded)
             {
                 if (s != sceneName)
@@ -173,7 +190,6 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    // Optional helper: load one, unload others (simple "switch")
     public async Task SwitchTo(SceneReference target, params SceneReference[] scenesToUnload)
     {
         if (target == null || !target.IsValid)
@@ -197,11 +213,58 @@ public class GameManager : MonoBehaviour
         if (targetLocation == null || !targetLocation.IsValid)
             return;
 
+        // ✅ Optional but recommended: also enforce restriction on manual travel
+        if (sceneDatabase != null && TimeManager.Instance != null)
+        {
+            var day = TimeManager.Instance.DayOfWeek;
+            var phase = TimeManager.Instance.Phase;
+
+            if (!sceneDatabase.IsAllowedNow(targetLocation, day, phase))
+            {
+                Debug.Log($"Blocked travel to '{targetLocation.SceneName}' at {day}/{phase}.");
+                return;
+            }
+        }
+
         // unload previous location if any
-        if (!string.IsNullOrEmpty(CurrentLocation))
-            await Unload(CurrentLocation);
+        if (CurrentLocationRef != null && CurrentLocationRef.IsValid)
+            await Unload(CurrentLocationRef);
 
         await Load(targetLocation, setActive: true);
-        CurrentLocation = targetLocation.SceneName;
+
+        // ✅ store reference
+        CurrentLocationRef = targetLocation;
+    }
+
+    // ✅ Failsafe: if current location becomes invalid after time skip -> force Home
+    private async void HandleTimeChanged(DayOfWeek day, TimeOfDay phase)
+    {
+        if (_isForcingRelocation)
+            return;
+
+        if (sceneDatabase == null || sceneDatabase.Home == null || !sceneDatabase.Home.IsValid)
+            return;
+
+        if (CurrentLocationRef == null || !CurrentLocationRef.IsValid)
+            return;
+
+        // If we're already home, no action
+        if (CurrentLocationRef.SceneName == sceneDatabase.Home.SceneName)
+            return;
+
+        // Only gameplay locations should be listed/restricted; SceneDatabase decides.
+        if (!sceneDatabase.IsAllowedNow(CurrentLocationRef, day, phase))
+        {
+            _isForcingRelocation = true;
+            try
+            {
+                Debug.Log($"Location '{CurrentLocationRef.SceneName}' became restricted at {day}/{phase}. Forcing Home.");
+                await SwitchLocation(sceneDatabase.Home);
+            }
+            finally
+            {
+                _isForcingRelocation = false;
+            }
+        }
     }
 }
