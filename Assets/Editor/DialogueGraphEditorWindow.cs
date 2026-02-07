@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using UnityEditor;
@@ -22,7 +22,15 @@ public class DialogueGraphEditorWindow : EditorWindow
     private Vector2 _canvasScroll;
     private Vector2 _inspectorScroll;
 
-    private int _selectedNodeIndex = -1;
+    private string _selectedNodeId = null;
+
+    private bool HasSelection => !string.IsNullOrEmpty(_selectedNodeId);
+
+    private int GetSelectedIndex()
+    {
+        if (string.IsNullOrEmpty(_selectedNodeId)) return -1;
+        return FindNodeIndexById(_selectedNodeId);
+    }
 
     // Connection state: click output → click target input
     private PendingConnection _pending;
@@ -51,6 +59,16 @@ public class DialogueGraphEditorWindow : EditorWindow
     private void OnGUI()
     {
         DrawTopToolbar();
+
+        // Keyboard delete for selected node (Backspace/Delete)
+        if (Event.current.type == EventType.KeyDown && HasSelection)
+        {
+            if (Event.current.keyCode == KeyCode.Backspace || Event.current.keyCode == KeyCode.Delete)
+            {
+                DeleteSelectedNode();
+                Event.current.Use();
+            }
+        }
 
         EditorGUILayout.BeginHorizontal();
         DrawLeftPanel();
@@ -151,13 +169,14 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             _inspectorScroll = EditorGUILayout.BeginScrollView(_inspectorScroll);
 
-            if (_selectedNodeIndex < 0 || _selectedNodeIndex >= _nodesProp.arraySize)
+            int sel = GetSelectedIndex();
+            if (sel < 0)
             {
                 EditorGUILayout.HelpBox("Select a node to edit its fields.", MessageType.None);
             }
             else
             {
-                DrawSelectedNodeInspector(_selectedNodeIndex);
+                DrawSelectedNodeInspector(sel);
             }
 
             EditorGUILayout.EndScrollView();
@@ -166,7 +185,7 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(_selectedNodeIndex < 0))
+                using (new EditorGUI.DisabledScope(!HasSelection))
                 {
                     if (GUILayout.Button("Delete Selected"))
                         DeleteSelectedNode();
@@ -196,7 +215,8 @@ public class DialogueGraphEditorWindow : EditorWindow
         _lastCanvasMouse = Event.current.mousePosition + _canvasScroll;
 
         // Left-click empty canvas to deselect the current node.
-        if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        // IMPORTANT: only if the click wasn't already used by a node window.
+        if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && Event.current.type != EventType.Used)
         {
             bool clickedOnNode = false;
             foreach (var kv in _nodeRects)
@@ -210,7 +230,7 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             if (!clickedOnNode)
             {
-                _selectedNodeIndex = -1;
+                _selectedNodeId = null;
                 GUI.FocusControl(null);
                 Repaint();
             }
@@ -305,9 +325,9 @@ public class DialogueGraphEditorWindow : EditorWindow
         // Select on click
         if (e.type == EventType.MouseDown && e.button == 0)
         {
-            _selectedNodeIndex = index;
+            _selectedNodeId = nodeProp.FindPropertyRelative("id").stringValue;
             GUI.FocusControl(null);
-            Event.current.Use();   // <-- important
+            Event.current.Use();   // prevents canvas click from immediately deselecting
             Repaint();
         }
 
@@ -365,53 +385,6 @@ public class DialogueGraphEditorWindow : EditorWindow
         }
 
         GUI.DragWindow(new Rect(0, 0, NodeWidth, NodeHeaderHeight));
-    }
-
-    private Vector2 GetInputPortCenter(Rect nodeRect)
-    {
-        // Top-right input port
-        float x = nodeRect.xMax - 10f;
-        float y = nodeRect.y + 18f;
-        return new Vector2(x, y);
-    }
-
-    private Vector2 GetOutputPortCenter(Rect nodeRect, DialogueNodeType type, string portKey, SerializedProperty nodeProp)
-    {
-        // Right-side outputs. These Y offsets match our current node UI roughly.
-        // If you later change node layout, tweak these constants.
-        float x = nodeRect.xMax - 10f;
-
-        switch (type)
-        {
-            case DialogueNodeType.Line:
-                // "Next" row near bottom of line node
-                return new Vector2(x, nodeRect.y + 168f);
-
-            case DialogueNodeType.Command:
-                // "Next" row near bottom of command node
-                return new Vector2(x, nodeRect.y + 92f);
-
-            case DialogueNodeType.Branch:
-                if (portKey == "True") return new Vector2(x, nodeRect.y + 92f);
-                if (portKey == "False") return new Vector2(x, nodeRect.y + 118f);
-                return new Vector2(x, nodeRect.y + 92f);
-
-            case DialogueNodeType.Choice:
-                {
-                    // PortKey format: "Choice:i"
-                    int idx = 0;
-                    if (portKey.StartsWith("Choice:", StringComparison.Ordinal))
-                        int.TryParse(portKey.Substring("Choice:".Length), out idx);
-
-                    // First choice row starts here; each row step matches inline choice row height.
-                    float startY = nodeRect.y + 68f;
-                    float stepY = 26f;
-                    return new Vector2(x, startY + idx * stepY);
-                }
-
-            default:
-                return new Vector2(x, nodeRect.y + 90f);
-        }
     }
 
     // ---------------- Inline node views + ports ----------------
@@ -738,42 +711,28 @@ public class DialogueGraphEditorWindow : EditorWindow
             var type = GetNodeType(nodeProp);
             string srcId = nodeProp.FindPropertyRelative("id").stringValue;
 
-            if (!_nodeRects.TryGetValue(srcId, out var srcRect))
-                continue;
-
-            void Draw(string portKey, string dstId, string label)
-            {
-                if (string.IsNullOrEmpty(dstId)) return;
-                if (!_nodeRects.TryGetValue(dstId, out var dstRect)) return;
-
-                var a = GetOutputPortCenter(srcRect, type, portKey, nodeProp);
-                var b = GetInputPortCenter(dstRect);
-
-                DrawBezier(a, b, Color.white);
-
-                // Optional: label near midpoint
-                var mid = (a + b) * 0.5f;
-                var size = EditorStyles.miniLabel.CalcSize(new GUIContent(label));
-                var r = new Rect(mid.x - size.x * 0.5f, mid.y - size.y * 0.5f, size.x + 6, size.y + 2);
-                EditorGUI.DrawRect(r, new Color(0f, 0f, 0f, 0.35f));
-                GUI.Label(new Rect(r.x + 3, r.y + 1, r.width, r.height), label, EditorStyles.miniLabel);
-            }
-
             switch (type)
             {
                 case DialogueNodeType.Line:
-                    Draw("Next", nodeProp.FindPropertyRelative("nextNodeId").stringValue, "Next");
-                    break;
-
+                    {
+                        string dst = nodeProp.FindPropertyRelative("nextNodeId").stringValue;
+                        DrawConnectionIfValid(srcId, "Next", dst, "Next");
+                        break;
+                    }
                 case DialogueNodeType.Command:
-                    Draw("Next", nodeProp.FindPropertyRelative("nextNodeId").stringValue, "Next");
-                    break;
-
+                    {
+                        string dst = nodeProp.FindPropertyRelative("nextNodeId").stringValue;
+                        DrawConnectionIfValid(srcId, "Next", dst, "Next");
+                        break;
+                    }
                 case DialogueNodeType.Branch:
-                    Draw("True", nodeProp.FindPropertyRelative("trueNextNodeId").stringValue, "True");
-                    Draw("False", nodeProp.FindPropertyRelative("falseNextNodeId").stringValue, "False");
-                    break;
-
+                    {
+                        string t = nodeProp.FindPropertyRelative("trueNextNodeId").stringValue;
+                        string f = nodeProp.FindPropertyRelative("falseNextNodeId").stringValue;
+                        DrawConnectionIfValid(srcId, "True", t, "True");
+                        DrawConnectionIfValid(srcId, "False", f, "False");
+                        break;
+                    }
                 case DialogueNodeType.Choice:
                     {
                         var choicesProp = nodeProp.FindPropertyRelative("choices");
@@ -781,36 +740,29 @@ public class DialogueGraphEditorWindow : EditorWindow
                         {
                             var ch = choicesProp.GetArrayElementAtIndex(c);
                             string dst = ch.FindPropertyRelative("nextNodeId").stringValue;
-                            string txt = ch.FindPropertyRelative("text").stringValue;
-                            if (string.IsNullOrEmpty(txt)) txt = $"Choice {c}";
-                            Draw($"Choice:{c}", dst, txt);
+                            string choiceText = ch.FindPropertyRelative("text").stringValue;
+                            if (string.IsNullOrWhiteSpace(choiceText))
+                                choiceText = $"Choice {c}";
+                            DrawConnectionIfValid(srcId, $"Choice:{c}", dst, choiceText);
                         }
                         break;
                     }
             }
         }
 
-        // Pending preview
+        // Pending connection preview
         if (_pending.IsActive)
         {
-            if (_nodeRects.TryGetValue(_pending.SourceNodeId, out var srcRect))
+            if (TryGetPortWorld(_pending.SourceNodeId, _pending.PortKey, out var a))
             {
-                int srcIndex = FindNodeIndexById(_pending.SourceNodeId);
-                if (srcIndex >= 0)
-                {
-                    var srcProp = _nodesProp.GetArrayElementAtIndex(srcIndex);
-                    var type = GetNodeType(srcProp);
-
-                    var a = GetOutputPortCenter(srcRect, type, _pending.PortKey, srcProp);
-                    var b = _lastCanvasMouse; // canvas coords
-                    DrawBezier(a, b, Color.yellow);
-                }
+                var b = _lastCanvasMouse;
+                DrawBezier(a, b, Color.yellow);
+                Repaint();
             }
         }
 
         Handles.EndGUI();
     }
-
 
     private void DrawConnectionIfValid(string srcId, string portKey, string dstId, string label)
     {
@@ -899,19 +851,23 @@ public class DialogueGraphEditorWindow : EditorWindow
         }
 
         // Auto-connect if requested
-        if (autoConnectFromSelected && _selectedNodeIndex >= 0 && _selectedNodeIndex < _nodesProp.arraySize)
+        if (autoConnectFromSelected && HasSelection)
         {
-            var fromProp = _nodesProp.GetArrayElementAtIndex(_selectedNodeIndex);
-            string fromId = fromProp.FindPropertyRelative("id").stringValue;
-
-            if (TryGetFirstDanglingOutputPort(fromProp, out string portKey))
+            int fromIndex = GetSelectedIndex();
+            if (fromIndex >= 0 && fromIndex < _nodesProp.arraySize)
             {
-                _pending = new PendingConnection(fromId, portKey);
-                CompleteConnection(guid);
+                var fromProp = _nodesProp.GetArrayElementAtIndex(fromIndex);
+                string fromId = fromProp.FindPropertyRelative("id").stringValue;
+
+                if (TryGetFirstDanglingOutputPort(fromProp, out string portKey))
+                {
+                    _pending = new PendingConnection(fromId, portKey);
+                    CompleteConnection(guid);
+                }
             }
         }
 
-        _selectedNodeIndex = idx;
+        _selectedNodeId = guid;
         _pending = default;
         Repaint();
     }
@@ -968,37 +924,38 @@ public class DialogueGraphEditorWindow : EditorWindow
         return false;
     }
 
-    private void DeleteSelectedNode()
+private void DeleteSelectedNode()
+{
+    int sel = GetSelectedIndex();
+    if (sel < 0 || sel >= _nodesProp.arraySize) return;
+
+    EnsureSerialized();
+
+    var element = _nodesProp.GetArrayElementAtIndex(sel);
+    string id = element.FindPropertyRelative("id").stringValue;
+
+    RemoveAllLinksTo(id);
+
+    // ManagedReference safe delete: null it first, apply, then delete
+    element.managedReferenceValue = null;
+    ApplyModified();
+
+    // Now remove the slot
+    _nodesProp.DeleteArrayElementAtIndex(sel);
+    ApplyModified();
+
+    if (_startNodeIdProp.stringValue == id)
     {
-        if (_selectedNodeIndex < 0 || _selectedNodeIndex >= _nodesProp.arraySize) return;
-
-        EnsureSerialized();
-
-        var element = _nodesProp.GetArrayElementAtIndex(_selectedNodeIndex);
-        string id = element.FindPropertyRelative("id").stringValue;
-
-        RemoveAllLinksTo(id);
-
-        // ManagedReference safe delete: null it first, apply, then delete
-        element.managedReferenceValue = null;
+        _startNodeIdProp.stringValue = "";
         ApplyModified();
-
-        // Now remove the slot
-        _nodesProp.DeleteArrayElementAtIndex(_selectedNodeIndex);
-        ApplyModified();
-
-        if (_startNodeIdProp.stringValue == id)
-        {
-            _startNodeIdProp.stringValue = "";
-            ApplyModified();
-        }
-
-        _selectedNodeIndex = -1;
-        _pending = default;
-        Repaint();
     }
 
-    private void CompleteConnection(string targetNodeId)
+    _selectedNodeId = null;
+    _pending = default;
+    Repaint();
+}
+
+private void CompleteConnection(string targetNodeId)
     {
         if (!_pending.IsActive) return;
         if (string.IsNullOrEmpty(targetNodeId)) return;
@@ -1072,7 +1029,7 @@ public class DialogueGraphEditorWindow : EditorWindow
         _pending = new PendingConnection(srcId, portKey);
         CompleteConnection(guid);
 
-        _selectedNodeIndex = idx;
+        _selectedNodeId = guid;
     }
 
     private void AddChoice(SerializedProperty choiceNodeProp)
@@ -1243,7 +1200,7 @@ public class DialogueGraphEditorWindow : EditorWindow
     private void SetGraph(DialogueGraph graph)
     {
         _graph = graph;
-        _selectedNodeIndex = -1;
+        _selectedNodeId = null;
         _pending = default;
 
         if (_graph != null)
