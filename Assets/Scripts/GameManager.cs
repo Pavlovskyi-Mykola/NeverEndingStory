@@ -28,6 +28,9 @@ public class GameManager : MonoBehaviour
     public event Action<string> SceneLoadCompleted;
     public event Action<string> SceneUnloadStarted;
     public event Action<string> SceneUnloadCompleted;
+    public event Action<SceneReference> LocationLoadStarted;
+    public event Action<SceneReference> LocationReady; // <- scene loaded + active + CurrentLocationRef updated
+    public static event System.Action<GameManager> InstanceReady;
 
     private bool _isForcingRelocation;
 
@@ -42,6 +45,7 @@ public class GameManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        InstanceReady?.Invoke(this);
         CacheAlreadyLoadedScenes();
     }
 
@@ -67,6 +71,7 @@ public class GameManager : MonoBehaviour
             await Load(sceneDatabase.MainMenu, setActive: true);
             CurrentLocationRef = sceneDatabase.MainMenu; // ✅ set reference
         }
+        LocationLoadStarted?.Invoke(CurrentLocationRef);
     }
 
     private void CacheAlreadyLoadedScenes()
@@ -213,11 +218,13 @@ public class GameManager : MonoBehaviour
         if (targetLocation == null || !targetLocation.IsValid)
             return;
 
+        LocationLoadStarted?.Invoke(targetLocation);
+
         // ✅ Optional but recommended: also enforce restriction on manual travel
         if (sceneDatabase != null && TimeManager.Instance != null)
         {
             var day = TimeManager.Instance.DayOfWeek;
-            var phase = TimeManager.Instance.Phase;
+            var phase = TimeManager.Instance.TimeOfDay;
 
             if (!sceneDatabase.IsAllowedNow(targetLocation, day, phase))
             {
@@ -234,6 +241,9 @@ public class GameManager : MonoBehaviour
 
         // ✅ store reference
         CurrentLocationRef = targetLocation;
+
+        // ✅ THIS is the key hook NPC system will listen to
+        LocationReady?.Invoke(CurrentLocationRef);
     }
 
     // ✅ Failsafe: if current location becomes invalid after time skip -> force Home

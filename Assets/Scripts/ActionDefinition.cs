@@ -9,6 +9,11 @@ public enum ActionFailReason
     WrongTimePhase,
     NotAvailableHere
 }
+public enum TimeSkipMode
+{
+    None,
+    NextPhase
+}
 
 [CreateAssetMenu(fileName = "ActionDefinition", menuName = "Game/Action Definition")]
 public class ActionDefinition : ScriptableObject
@@ -27,6 +32,9 @@ public class ActionDefinition : ScriptableObject
     public int MoneyReward;        // earn
     public int StrengthReward;
     public int IntellectReward;
+
+    [Header("Time")]
+    public TimeSkipMode TimeSkip = TimeSkipMode.None;
 
     [Header("Time Constraints")]
     public bool RestrictByPhase = false;

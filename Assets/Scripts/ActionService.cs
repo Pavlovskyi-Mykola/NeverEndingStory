@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 public class ActionService : MonoBehaviour
@@ -24,7 +24,7 @@ public class ActionService : MonoBehaviour
         // Phase restriction
         if (action.RestrictByPhase && TimeManager.Instance != null)
         {
-            var phase = TimeManager.Instance.Phase;
+            var phase = TimeManager.Instance.TimeOfDay;
             bool ok = false;
             for (int i = 0; i < action.AllowedPhases.Length; i++)
                 if (action.AllowedPhases[i] == phase) { ok = true; break; }
@@ -62,6 +62,12 @@ public class ActionService : MonoBehaviour
         if (action.IntellectReward > 0)
             stats.AddIntellect(action.IntellectReward);
 
+        // ⏭ Time effect
+        if (action.TimeSkip == TimeSkipMode.NextPhase &&
+            TimeManager.Instance != null)
+        {
+            TimeManager.Instance.AdvancePhase();
+        }
         // Later: advance time phase, consume energy, etc.
 
         return true;
