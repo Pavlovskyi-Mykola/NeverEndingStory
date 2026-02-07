@@ -337,15 +337,21 @@ public class DialogueGraphEditorWindow : EditorWindow
 
         using (new GUILayout.HorizontalScope())
         {
-            if (GUILayout.Button(new GUIContent("★", "Set this node as Start"), GUILayout.Width(22), GUILayout.Height(18)))
-            {
-                _startNodeIdProp.stringValue = nodeId;
-                ApplyModified();
-            }
+            // Input port (top-left)
+            DrawInputPort(nodeProp);
 
             GUILayout.FlexibleSpace();
-            DrawInputPort(nodeProp);
+
+            // Start node button (top-right)
+            if (GUILayout.Button(new GUIContent("★", "Set as Start Node"),
+                GUILayout.Width(22), GUILayout.Height(18)))
+            {
+                _startNodeIdProp.stringValue =
+                    nodeProp.FindPropertyRelative("id").stringValue;
+                ApplyModified();
+            }
         }
+
 
         // Visual indicator for the Start node
         if (isStart)
@@ -818,8 +824,8 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private static void DrawBezier(Vector2 a, Vector2 b, Color col)
     {
-        var ta = a + Vector2.right * 90f;
-        var tb = b + Vector2.left * 90f;
+        var ta = a + Vector2.right * 90f;  // output pushes right
+        var tb = b + Vector2.left * 90f;   // input pulls from left
         Handles.DrawBezier(a, b, ta, tb, col, null, 3f);
     }
 
@@ -1334,8 +1340,8 @@ private void CompleteConnection(string targetNodeId)
     }
     private Vector2 GetInputPortCenter(Rect nodeRect)
     {
-        // Top-right input port
-        float x = nodeRect.xMax - 10f;
+        // Left-side input port
+        float x = nodeRect.xMin + 10f;
         float y = nodeRect.y + 18f;
         return new Vector2(x, y);
     }
