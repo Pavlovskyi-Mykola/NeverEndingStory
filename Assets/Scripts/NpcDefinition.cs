@@ -15,24 +15,36 @@ public class NpcDefinition : ScriptableObject
     [Header("Schedule")]
     public List<NpcScheduleEntry> Schedule = new List<NpcScheduleEntry>();
 
-    /// <summary>
-    /// Returns the first matching schedule entry for the given day/phase.
-    /// If none matches -> NPC is absent.
-    /// </summary>
-    public bool TryGetScheduleFor(DayOfWeek day, TimeOfDay phase, out NpcScheduleEntry entry)
+    public bool TryGetScheduleForLocation(DayOfWeek day, TimeOfDay phase, SceneReference location, out NpcScheduleEntry entry)
     {
+        entry = default;
+
+        if (location == null || !location.IsValid)
+            return false;
+
         for (int i = 0; i < Schedule.Count; i++)
         {
             var e = Schedule[i];
-            if (e.Matches(day, phase))
-            {
-                entry = e;
-                return true;
-            }
+            if (e.Absent) continue;
+
+            if (!e.MatchesTime(day, phase))
+                continue;
+
+            if (!SceneRefEquals(e.LocationScene, location))
+                continue;
+
+            entry = e;
+            return true;
         }
 
-        entry = default;
         return false;
+    }
+
+    private static bool SceneRefEquals(SceneReference a, SceneReference b)
+    {
+        if (a == null || b == null) return false;
+        if (!a.IsValid || !b.IsValid) return false;
+        return a.SceneName == b.SceneName;
     }
 }
 
@@ -51,14 +63,10 @@ public struct NpcScheduleEntry
     [Header("Optional")]
     public bool Absent; // if true, NPC is forced absent even if LocationScene is set
 
-    public bool Matches(DayOfWeek day, TimeOfDay phase)
+    public bool MatchesTime(DayOfWeek day, TimeOfDay phase)
     {
-        if (Absent) return false;
-        if (Days == DayOfWeekMask.None) return false;
-        if (Phases == DayPhaseMask.None) return false;
-
-        var dayOk = Days.HasFlag(DayOfWeekMaskExtensions.From(day));
-        var phaseOk = Phases.HasFlag(DayPhaseMaskExtensions.From(phase));
+        bool dayOk = (Days & DayOfWeekMaskExtensions.From(day)) != 0;
+        bool phaseOk = (Phases & DayPhaseMaskExtensions.From(phase)) != 0;
         return dayOk && phaseOk;
     }
 }

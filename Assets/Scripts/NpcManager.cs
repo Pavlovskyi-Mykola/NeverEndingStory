@@ -60,8 +60,6 @@ public class NpcManager : MonoBehaviour
         tm.OnTimeChanged -= HandleTimeChanged;
         tm.OnTimeChanged += HandleTimeChanged;
 
-        Debug.Log("[NpcManager] Subscribed to TimeManager.OnTimeChanged");
-
         // Optional: immediate refresh using current time (good when scene loads before binding)
         RefreshAll();
     }
@@ -88,15 +86,9 @@ public class NpcManager : MonoBehaviour
 
     public void RefreshAll()
     {
-        // If we have no spawner in current scene, ensure nothing stays spawned
-        if (_activeSpawner == null || _activeSpawner.LocationScene == null || !_activeSpawner.LocationScene.IsValid)
-        {
-            // If you want, you can keep a reference to previous spawner and despawn there.
-            // For now: best-effort cleanup in current spawner only.
-            return;
-        }
-
         if (TimeManager.Instance == null) return;
+        if (_activeSpawner == null) return;
+        if (_currentLocation == null || !_currentLocation.IsValid) return;
 
         var day = TimeManager.Instance.DayOfWeek;
         var phase = TimeManager.Instance.TimeOfDay;
@@ -105,22 +97,15 @@ public class NpcManager : MonoBehaviour
         {
             var def = npcs[i];
             if (def == null) continue;
-            if (string.IsNullOrWhiteSpace(def.NpcId)) continue;
-            if (def.Prefab == null)
+
+            if (def.Prefab == null || string.IsNullOrWhiteSpace(def.NpcId))
             {
                 _activeSpawner.Despawn(def.NpcId);
                 continue;
             }
 
-            // No match => absent
-            if (!def.TryGetScheduleFor(day, phase, out var entry))
-            {
-                _activeSpawner.Despawn(def.NpcId);
-                continue;
-            }
-
-            // Must match current location
-            if (!SceneReferenceEquals(entry.LocationScene, _activeSpawner.LocationScene))
+            // ✅ Only ask: "Is this NPC scheduled to be HERE right now?"
+            if (!def.TryGetScheduleForLocation(day, phase, _currentLocation, out var entry))
             {
                 _activeSpawner.Despawn(def.NpcId);
                 continue;
