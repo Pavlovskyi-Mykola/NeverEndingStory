@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 public class ActionService : MonoBehaviour
@@ -62,6 +62,12 @@ public class ActionService : MonoBehaviour
         if (action.IntellectReward > 0)
             stats.AddIntellect(action.IntellectReward);
 
+        // ⏭ Time effect
+        if (action.TimeSkip == TimeSkipMode.NextPhase &&
+            TimeManager.Instance != null)
+        {
+            TimeManager.Instance.AdvancePhase();
+        }
         // Later: advance time phase, consume energy, etc.
 
         return true;
