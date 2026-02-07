@@ -711,28 +711,42 @@ public class DialogueGraphEditorWindow : EditorWindow
             var type = GetNodeType(nodeProp);
             string srcId = nodeProp.FindPropertyRelative("id").stringValue;
 
+            if (!_nodeRects.TryGetValue(srcId, out var srcRect))
+                continue;
+
+            void Draw(string portKey, string dstId, string label)
+            {
+                if (string.IsNullOrEmpty(dstId)) return;
+                if (!_nodeRects.TryGetValue(dstId, out var dstRect)) return;
+
+                var a = GetOutputPortCenter(srcRect, type, portKey, nodeProp);
+                var b = GetInputPortCenter(dstRect);
+
+                DrawBezier(a, b, Color.white);
+
+                // Optional: label near midpoint
+                var mid = (a + b) * 0.5f;
+                var size = EditorStyles.miniLabel.CalcSize(new GUIContent(label));
+                var r = new Rect(mid.x - size.x * 0.5f, mid.y - size.y * 0.5f, size.x + 6, size.y + 2);
+                EditorGUI.DrawRect(r, new Color(0f, 0f, 0f, 0.35f));
+                GUI.Label(new Rect(r.x + 3, r.y + 1, r.width, r.height), label, EditorStyles.miniLabel);
+            }
+
             switch (type)
             {
                 case DialogueNodeType.Line:
-                    {
-                        string dst = nodeProp.FindPropertyRelative("nextNodeId").stringValue;
-                        DrawConnectionIfValid(srcId, "Next", dst, "Next");
-                        break;
-                    }
+                    Draw("Next", nodeProp.FindPropertyRelative("nextNodeId").stringValue, "Next");
+                    break;
+
                 case DialogueNodeType.Command:
-                    {
-                        string dst = nodeProp.FindPropertyRelative("nextNodeId").stringValue;
-                        DrawConnectionIfValid(srcId, "Next", dst, "Next");
-                        break;
-                    }
+                    Draw("Next", nodeProp.FindPropertyRelative("nextNodeId").stringValue, "Next");
+                    break;
+
                 case DialogueNodeType.Branch:
-                    {
-                        string t = nodeProp.FindPropertyRelative("trueNextNodeId").stringValue;
-                        string f = nodeProp.FindPropertyRelative("falseNextNodeId").stringValue;
-                        DrawConnectionIfValid(srcId, "True", t, "True");
-                        DrawConnectionIfValid(srcId, "False", f, "False");
-                        break;
-                    }
+                    Draw("True", nodeProp.FindPropertyRelative("trueNextNodeId").stringValue, "True");
+                    Draw("False", nodeProp.FindPropertyRelative("falseNextNodeId").stringValue, "False");
+                    break;
+
                 case DialogueNodeType.Choice:
                     {
                         var choicesProp = nodeProp.FindPropertyRelative("choices");
@@ -740,29 +754,36 @@ public class DialogueGraphEditorWindow : EditorWindow
                         {
                             var ch = choicesProp.GetArrayElementAtIndex(c);
                             string dst = ch.FindPropertyRelative("nextNodeId").stringValue;
-                            string choiceText = ch.FindPropertyRelative("text").stringValue;
-                            if (string.IsNullOrWhiteSpace(choiceText))
-                                choiceText = $"Choice {c}";
-                            DrawConnectionIfValid(srcId, $"Choice:{c}", dst, choiceText);
+                            string txt = ch.FindPropertyRelative("text").stringValue;
+                            if (string.IsNullOrEmpty(txt)) txt = $"Choice {c}";
+                            Draw($"Choice:{c}", dst, txt);
                         }
                         break;
                     }
             }
         }
 
-        // Pending connection preview
+        // Pending preview
         if (_pending.IsActive)
         {
-            if (TryGetPortWorld(_pending.SourceNodeId, _pending.PortKey, out var a))
+            if (_nodeRects.TryGetValue(_pending.SourceNodeId, out var srcRect))
             {
-                var b = _lastCanvasMouse;
-                DrawBezier(a, b, Color.yellow);
-                Repaint();
+                int srcIndex = FindNodeIndexById(_pending.SourceNodeId);
+                if (srcIndex >= 0)
+                {
+                    var srcProp = _nodesProp.GetArrayElementAtIndex(srcIndex);
+                    var type = GetNodeType(srcProp);
+
+                    var a = GetOutputPortCenter(srcRect, type, _pending.PortKey, srcProp);
+                    var b = _lastCanvasMouse; // canvas coords
+                    DrawBezier(a, b, Color.yellow);
+                }
             }
         }
 
         Handles.EndGUI();
     }
+
 
     private void DrawConnectionIfValid(string srcId, string portKey, string dstId, string label)
     {
@@ -1311,5 +1332,52 @@ private void CompleteConnection(string targetNodeId)
             PortKey = portKey;
         }
     }
+    private Vector2 GetInputPortCenter(Rect nodeRect)
+    {
+        // Top-right input port
+        float x = nodeRect.xMax - 10f;
+        float y = nodeRect.y + 18f;
+        return new Vector2(x, y);
+    }
+
+    private Vector2 GetOutputPortCenter(Rect nodeRect, DialogueNodeType type, string portKey, SerializedProperty nodeProp)
+    {
+        // Right-side outputs. These Y offsets match our current node UI roughly.
+        // If you later change node layout, tweak these constants.
+        float x = nodeRect.xMax - 10f;
+
+        switch (type)
+        {
+            case DialogueNodeType.Line:
+                // "Next" row near bottom of line node
+                return new Vector2(x, nodeRect.y + 168f);
+
+            case DialogueNodeType.Command:
+                // "Next" row near bottom of command node
+                return new Vector2(x, nodeRect.y + 92f);
+
+            case DialogueNodeType.Branch:
+                if (portKey == "True") return new Vector2(x, nodeRect.y + 92f);
+                if (portKey == "False") return new Vector2(x, nodeRect.y + 118f);
+                return new Vector2(x, nodeRect.y + 92f);
+
+            case DialogueNodeType.Choice:
+                {
+                    // PortKey format: "Choice:i"
+                    int idx = 0;
+                    if (portKey.StartsWith("Choice:", StringComparison.Ordinal))
+                        int.TryParse(portKey.Substring("Choice:".Length), out idx);
+
+                    // First choice row starts here; each row step matches inline choice row height.
+                    float startY = nodeRect.y + 68f;
+                    float stepY = 26f;
+                    return new Vector2(x, startY + idx * stepY);
+                }
+
+            default:
+                return new Vector2(x, nodeRect.y + 90f);
+        }
+    }
+
 }
 #endif
