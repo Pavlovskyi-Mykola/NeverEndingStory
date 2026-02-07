@@ -5,6 +5,8 @@ public class NpcManager : MonoBehaviour
 {
     public static NpcManager Instance { get; private set; }
 
+    public IReadOnlyList<NpcDefinition> Npcs => npcs;
+
     [Header("NPC Database")]
     [SerializeField] private List<NpcDefinition> npcs = new List<NpcDefinition>();
 
@@ -127,5 +129,24 @@ public class NpcManager : MonoBehaviour
         // ✅ Most SceneReference wrappers expose a SceneName or similar.
         // If yours uses a different property, change this one line.
         return a.SceneName == b.SceneName;
+    }
+
+    public List<string> GetAllSpeakerIds()
+    {
+        var result = new List<string> { "Player" };
+
+        for (int i = 0; i < npcs.Count; i++)
+        {
+            var def = npcs[i];
+            if (def == null) continue;
+
+            var id = def.NpcId;
+            if (string.IsNullOrWhiteSpace(id)) continue;
+
+            if (!result.Contains(id))
+                result.Add(id);
+        }
+
+        return result;
     }
 }

@@ -19,6 +19,13 @@ public class DialogueGraphEditorWindow : EditorWindow
     private SerializedProperty _nodesProp;
     private SerializedProperty _startNodeIdProp;
 
+    private string[] _speakerOptions = Array.Empty<string>();
+    private double _speakerOptionsLastRefreshTime;
+    private string[] _speakerOptionsCache = Array.Empty<string>();
+    private double _speakerOptionsNextRefreshTime = 0;
+    private const double SpeakerRefreshInterval = 1.0; // seconds
+
+
     private Vector2 _canvasScroll;
     private Vector2 _inspectorScroll;
 
@@ -75,7 +82,7 @@ public class DialogueGraphEditorWindow : EditorWindow
         DrawCanvas();
         EditorGUILayout.EndHorizontal();
 
-        if (Event.current.type == EventType.MouseMove)
+        if (Event.current.type == EventType.MouseMove && _pending.IsActive)
             Repaint();
     }
 
@@ -402,13 +409,21 @@ public class DialogueGraphEditorWindow : EditorWindow
         var nextProp = nodeProp.FindPropertyRelative("nextNodeId");
 
         // Inline edit speaker
-        EditorGUI.BeginChangeCheck();
-        string speaker = EditorGUILayout.TextField("Speaker", speakerProp.stringValue);
-        if (EditorGUI.EndChangeCheck())
+        var options = GetSpeakerOptions();
+        int idx = Array.IndexOf(options, speakerProp.stringValue);
+        if (idx < 0) idx = 0;
+
+        idx = EditorGUILayout.Popup("Speaker", idx, options);
+
+        if (options[idx] == "<Custom…>")
         {
-            speakerProp.stringValue = speaker;
-            ApplyModified();
+            speakerProp.stringValue = EditorGUILayout.TextField("Custom", speakerProp.stringValue);
         }
+        else
+        {
+            speakerProp.stringValue = options[idx];
+        }
+        ApplyModified();
 
         // Inline edit first lines of text
         EditorGUI.BeginChangeCheck();
@@ -651,11 +666,30 @@ public class DialogueGraphEditorWindow : EditorWindow
         switch (type)
         {
             case DialogueNodeType.Line:
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("speaker"));
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("text"));
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("onEnterCommands"), true);
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("nextNodeId"));
-                break;
+                {
+                    var speakerProp = nodeProp.FindPropertyRelative("speaker");
+
+                    var options = GetSpeakerOptions(); // your helper that returns string[]
+                    int idx = Array.IndexOf(options, speakerProp.stringValue);
+                    if (idx < 0) idx = 0;
+
+                    int newIdx = EditorGUILayout.Popup("Speaker", idx, options);
+
+                    if (options.Length > 0 && options[newIdx] == "<Custom…>")
+                    {
+                        // keep current value editable as custom
+                        speakerProp.stringValue = EditorGUILayout.TextField("Custom", speakerProp.stringValue);
+                    }
+                    else if (options.Length > 0)
+                    {
+                        speakerProp.stringValue = options[newIdx];
+                    }
+
+                    EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("text"));
+                    EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("onEnterCommands"), true);
+                    EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("nextNodeId"));
+                    break;
+                }
 
             case DialogueNodeType.Choice:
                 EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("choices"), true);
@@ -1265,7 +1299,6 @@ private void CompleteConnection(string targetNodeId)
         if (_graphSO == null) return;
         _graphSO.ApplyModifiedProperties();
         EditorUtility.SetDirty(_graph);
-        AssetDatabase.SaveAssets();
     }
 
     private int FindNodeIndexById(string id)
@@ -1384,6 +1417,37 @@ private void CompleteConnection(string targetNodeId)
                 return new Vector2(x, nodeRect.y + 90f);
         }
     }
+    private string[] GetSpeakerOptions()
+    {
+        // Refresh at most once per second
+        if (EditorApplication.timeSinceStartup < _speakerOptionsNextRefreshTime &&
+            _speakerOptionsCache != null &&
+            _speakerOptionsCache.Length > 0)
+        {
+            return _speakerOptionsCache;
+        }
 
+        _speakerOptionsNextRefreshTime = EditorApplication.timeSinceStartup + SpeakerRefreshInterval;
+
+        var list = new List<string> { "Player" };
+
+        // Finding scene objects is relatively expensive – do it rarely.
+        var mgr = UnityEngine.Object.FindFirstObjectByType<NpcManager>();
+        if (mgr != null)
+        {
+            // If your GetAllSpeakerIds already includes Player, still safe
+            var ids = mgr.GetAllSpeakerIds();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                var s = ids[i];
+                if (!string.IsNullOrWhiteSpace(s) && !list.Contains(s))
+                    list.Add(s);
+            }
+        }
+
+        list.Add("<Custom…>");
+        _speakerOptionsCache = list.ToArray();
+        return _speakerOptionsCache;
+    }
 }
 #endif
