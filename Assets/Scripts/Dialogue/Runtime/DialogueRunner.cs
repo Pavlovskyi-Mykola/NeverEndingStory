@@ -105,6 +105,8 @@ public class DialogueRunner : MonoBehaviour
 
     private void EnterNode(DialogueNode node)
     {
+        Debug.Log($"[DialogueRunner] Enter {node.NodeType} node: {node.Id}");
+
         switch (node.NodeType)
         {
             case DialogueNodeType.Line:

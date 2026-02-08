@@ -53,21 +53,18 @@ public class LocationNpcSpawner : MonoBehaviour
         }
     }
 
-    public void EnsureSpawned(string npcId, GameObject prefab, string spawnPointKey)
+    public GameObject EnsureSpawned(string npcId, GameObject prefab, string spawnPointKey)
     {
-        if (string.IsNullOrWhiteSpace(npcId) || prefab == null)
-            return;
-
-        // Already spawned -> optionally move if spawn point changed
         if (_spawned.TryGetValue(npcId, out var existing) && existing != null)
         {
+            // Already spawned -> optionally move if spawn point changed
             var t = ResolveSpawnPoint(spawnPointKey);
             if (t != null)
             {
                 existing.transform.SetPositionAndRotation(t.position, t.rotation);
                 existing.transform.SetParent(t, worldPositionStays: true);
             }
-            return;
+            return existing;
         }
 
         // Spawn new
@@ -79,6 +76,7 @@ public class LocationNpcSpawner : MonoBehaviour
         instance.name = $"{npcId} (NPC)";
 
         _spawned[npcId] = instance;
+        return instance;
     }
 
     public void Despawn(string npcId)

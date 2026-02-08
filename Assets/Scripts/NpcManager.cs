@@ -113,7 +113,14 @@ public class NpcManager : MonoBehaviour
                 continue;
             }
 
-            _activeSpawner.EnsureSpawned(def.NpcId, def.Prefab, entry.SpawnPointKey);
+            var instance = _activeSpawner.EnsureSpawned(def.NpcId, def.Prefab, entry.SpawnPointKey);
+
+            if (instance != null)
+            {
+                var interactable = instance.GetComponent<NpcInteractable>();
+                if (interactable != null)
+                    interactable.Init(def, entry, _currentLocation);
+            }
         }
     }
 
