@@ -39,6 +39,9 @@ public class TimeManager : MonoBehaviour
 
     public void AdvancePhase()
     {
+        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+            return;
+
         switch (timeOfDay)
         {
             case TimeOfDay.Morning: timeOfDay = TimeOfDay.Afternoon; break;
@@ -74,6 +77,9 @@ public class TimeManager : MonoBehaviour
 
     public void SleepToMorning()
     {
+        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+            return;
+
         // Sleep ends the day -> next day morning
         timeOfDay = TimeOfDay.Morning;
         dayOfWeek = NextDay(dayOfWeek);

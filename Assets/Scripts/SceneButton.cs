@@ -6,6 +6,9 @@ public class LocationButton : MonoBehaviour
 
     public void SwitchScene()
     {
+        if (GameManager.Instance == null) return;
+        if (GameManager.Instance.IsInDialogue) return;
+
         _ = GameManager.Instance.SwitchLocation(targetLocation);
     }
 }

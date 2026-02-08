@@ -13,6 +13,7 @@ public class DialogueRunner : MonoBehaviour
     private DialogueGraph _graph;
     private DialogueNode _current;
 
+    public event Action<bool> OnDialogueStateChanged;
     public bool IsRunning => _graph != null && _current != null;
 
     private void Awake()
@@ -32,10 +33,11 @@ public class DialogueRunner : MonoBehaviour
         if (_current == null)
         {
             Debug.LogWarning($"DialogueGraph '{graph.name}' has invalid StartNodeId.");
-            StopDialogue();
+            StopDialogue(); // will fire false
             return;
         }
 
+        OnDialogueStateChanged?.Invoke(true);
         EnterNode(_current);
     }
 
@@ -43,6 +45,8 @@ public class DialogueRunner : MonoBehaviour
     {
         _graph = null;
         _current = null;
+
+        OnDialogueStateChanged?.Invoke(false);
         OnHideDialogue?.Invoke();
     }
 

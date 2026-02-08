@@ -7,7 +7,8 @@ public enum ActionFailReason
     NotEnoughStrength,
     NotEnoughIntellect,
     WrongTimePhase,
-    NotAvailableHere
+    NotAvailableHere,
+    BlockedByDialogue
 }
 public enum TimeSkipMode
 {

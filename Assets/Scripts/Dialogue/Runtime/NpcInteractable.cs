@@ -16,6 +16,9 @@ public class NpcInteractable : MonoBehaviour
     // Option A: Talk directly (UI button calls this)
     public void Talk()
     {
+        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+            return;
+
         if (_dialogue == null)
         {
             Debug.LogWarning($"NPC '{_def?.NpcId}' has no dialogue for current schedule/location.");
@@ -24,7 +27,7 @@ public class NpcInteractable : MonoBehaviour
 
         if (DialogueRunner.Instance == null)
         {
-            Debug.LogError("DialogueRunner.Instance is null (make sure it's in Bootstrap).");
+            Debug.LogError("DialogueRunner.Instance is null (Bootstrap missing).");
             return;
         }
 
