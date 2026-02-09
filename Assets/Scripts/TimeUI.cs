@@ -55,13 +55,13 @@ public class TimeUI : MonoBehaviour
     public void AdvanceTimeButton()
     {
         if (TimeManager.Instance == null) return;
-        TimeManager.Instance.AdvancePhase();
+        TimeManager.Instance.AdvancePhase(TimeChangeSource.PlayerUI);
     }
 
     public void SleepToMorningButton()
     {
         if (TimeManager.Instance == null) return;
-        TimeManager.Instance.SleepToMorning();
+        TimeManager.Instance.SleepToMorning(TimeChangeSource.PlayerUI);
     }
 
 }

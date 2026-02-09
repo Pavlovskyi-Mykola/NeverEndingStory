@@ -46,7 +46,7 @@ public class DialogueCommand
 
             case DialogueCommandType.AdvanceTimePhase:
                 if (TimeManager.Instance != null)
-                    TimeManager.Instance.AdvancePhase();
+                    TimeManager.Instance.AdvancePhase(TimeChangeSource.Dialogue);
                 break;
 
             case DialogueCommandType.SetFlag:

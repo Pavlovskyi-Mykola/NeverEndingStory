@@ -79,7 +79,7 @@ public class ActionService : MonoBehaviour
         if (action.TimeSkip == TimeSkipMode.NextPhase &&
             TimeManager.Instance != null)
         {
-            TimeManager.Instance.AdvancePhase();
+            TimeManager.Instance.AdvancePhase(TimeChangeSource.Action);
         }
         // Later: advance time phase, consume energy, etc.
 

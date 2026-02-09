@@ -3,6 +3,8 @@ using UnityEngine;
 
 public enum TimeOfDay {Morning, Afternoon, Evening, Night}
 
+public enum TimeChangeSource {PlayerUI, Action, Dialogue, System}
+
 public class TimeManager : MonoBehaviour
 {
     public static TimeManager Instance { get; private set; }
@@ -37,9 +39,11 @@ public class TimeManager : MonoBehaviour
         RaiseTimeChanged();
     }
 
-    public void AdvancePhase()
+    public void AdvancePhase(TimeChangeSource source)
     {
-        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+        if (GameManager.Instance != null &&
+            GameManager.Instance.IsInDialogue &&
+            source == TimeChangeSource.PlayerUI)
             return;
 
         switch (timeOfDay)
@@ -75,9 +79,11 @@ public class TimeManager : MonoBehaviour
         return (DayOfWeek)next;
     }
 
-    public void SleepToMorning()
+    public void SleepToMorning(TimeChangeSource source)
     {
-        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+        if (GameManager.Instance != null &&
+            GameManager.Instance.IsInDialogue &&
+            source == TimeChangeSource.PlayerUI)
             return;
 
         // Sleep ends the day -> next day morning
