@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -135,17 +135,23 @@ public class DialogueUI : MonoBehaviour
             _spawnedChoiceButtons.Add(btn);
 
             var txt = btn.GetComponentInChildren<Text>();
-            if (txt != null) txt.text = choices[i].Text;
+            if (txt != null)
+                txt.text = choices[index].Text;
 
             btn.onClick.AddListener(() =>
             {
-                // Show the player choice in the conversation log
+                // ✅ GATE FIRST — before doing anything else
+                if (DialogueRunner.Instance == null) return;
+                if (DialogueRunner.Instance.IsAdvancing) return;
+
+                // ✅ Append the chosen player line to dialogue history
                 AppendLine(playerSpeakerName, choices[index].Text, isPlayer: true);
 
-                ClearChoices(); // prevent double-click spam
+                // ✅ Clear UI so it can't be clicked again
+                ClearChoices();
 
-                if (DialogueRunner.Instance != null)
-                    DialogueRunner.Instance.Choose(index);
+                // ✅ Advance dialogue
+                DialogueRunner.Instance.Choose(index);
             });
         }
     }
@@ -166,6 +172,9 @@ public class DialogueUI : MonoBehaviour
     {
         if (DialogueRunner.Instance == null) return;
 
+        // Runner is authoritative: ignore clicks while it is traversing auto nodes.
+        if (DialogueRunner.Instance.IsAdvancing) return;
+
         // If player line was previewed on the button, commit it to the log now.
         if (_hasPendingPlayerLine)
         {
@@ -175,6 +184,7 @@ public class DialogueUI : MonoBehaviour
 
         DialogueRunner.Instance.Continue();
     }
+
 
     private bool IsPlayerSpeaker(string speaker)
     {
