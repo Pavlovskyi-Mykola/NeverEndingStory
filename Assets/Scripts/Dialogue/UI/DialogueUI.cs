@@ -10,38 +10,31 @@ public class DialogueUI : MonoBehaviour
     [Header("Scrollable Conversation Log")]
     [SerializeField] private ScrollRect conversationScroll;
     [SerializeField] private Transform conversationContent;
-    [SerializeField] private DialogueLineUI linePrefab;
+    [SerializeField] private Text linePrefab;
     [SerializeField] private int maxLines = 200;
 
     [Header("Controls")]
     [SerializeField] private Button continueButton;
-    [SerializeField] private Text continueButtonLabel; // Text component inside the button
+    [SerializeField] private Text continueButtonLabel;
 
     [Header("Choices")]
     [SerializeField] private Transform choicesRoot;
     [SerializeField] private Button choiceButtonPrefab;
 
-    [Header("Speaker Mapping")]
-    [Tooltip("Must match the speaker value used in your dialogue graph for player lines.")]
-    [SerializeField] private string playerSpeakerName = "Player";
-
     [Header("Behavior")]
     [SerializeField] private bool clearLogOnHide = false;
 
-    private readonly List<DialogueLineUI> _spawnedLines = new();
+    private readonly List<Text> _spawnedLines = new();
     private readonly List<Button> _spawnedChoiceButtons = new();
 
     private bool _subscribed;
 
-    // Buffer for "player line shown on button"
-    private bool _hasPendingPlayerLine;
-    private string _pendingSpeaker;
-    private string _pendingText;
+    private bool _hasPendingPlayerReply;
+    private string _pendingPlayerSpeaker;
+    private string _pendingPlayerText;
 
     private void Awake()
     {
-        // IMPORTANT: keep this component on an always-active object.
-        // Toggle panelRoot only (panelRoot can be inactive at start).
         TrySubscribe();
         if (panelRoot != null) panelRoot.SetActive(false);
     }
@@ -49,7 +42,6 @@ public class DialogueUI : MonoBehaviour
     private void OnEnable()
     {
         TrySubscribe();
-
         if (continueButton != null)
             continueButton.onClick.AddListener(OnContinueClicked);
     }
@@ -67,8 +59,7 @@ public class DialogueUI : MonoBehaviour
         if (_subscribed) return;
         if (DialogueRunner.Instance == null) return;
 
-        DialogueRunner.Instance.OnShowLine += HandleShowLine;
-        DialogueRunner.Instance.OnShowChoices += HandleShowChoices;
+        DialogueRunner.Instance.OnTurn += HandleTurn;
         DialogueRunner.Instance.OnHideDialogue += HandleHide;
 
         _subscribed = true;
@@ -77,55 +68,72 @@ public class DialogueUI : MonoBehaviour
     private void Unsubscribe()
     {
         if (!_subscribed) return;
-
         if (DialogueRunner.Instance != null)
         {
-            DialogueRunner.Instance.OnShowLine -= HandleShowLine;
-            DialogueRunner.Instance.OnShowChoices -= HandleShowChoices;
+            DialogueRunner.Instance.OnTurn -= HandleTurn;
             DialogueRunner.Instance.OnHideDialogue -= HandleHide;
         }
-
         _subscribed = false;
     }
 
-    private void HandleShowLine(string speaker, string text)
+    private void HandleTurn(DialogueTurn turn)
     {
         if (panelRoot != null) panelRoot.SetActive(true);
 
         ClearChoices();
-        _hasPendingPlayerLine = false;
+        _hasPendingPlayerReply = false;
 
-        bool isPlayer = IsPlayerSpeaker(speaker);
+        if (turn.HasNpcLine)
+            AppendLine(turn.NpcSpeaker, turn.NpcText);
 
-        if (isPlayer)
+        switch (turn.Action)
         {
-            // Player line: preview on button, only append on click
-            _hasPendingPlayerLine = true;
-            _pendingSpeaker = speaker;
-            _pendingText = text;
+            case DialogueTurnAction.Continue:
+                ShowContinue(true);
+                SetContinueLabel("Continue");
+                break;
 
-            SetContinueLabel(text);
-            ShowContinue(true);
-        }
-        else
-        {
-            // NPC line: append immediately, button just says "Continue"
-            AppendLine(speaker, text, isPlayer: false);
+            case DialogueTurnAction.PlayerReply:
+                _hasPendingPlayerReply = true;
+                _pendingPlayerSpeaker = string.IsNullOrWhiteSpace(turn.PlayerSpeaker) ? "Player" : turn.PlayerSpeaker;
+                _pendingPlayerText = turn.PlayerText;
 
-            SetContinueLabel("Continue");
-            ShowContinue(true);
+                ShowContinue(true);
+                SetContinueLabel(turn.PlayerText);
+                break;
+
+            case DialogueTurnAction.Choices:
+                ShowContinue(false);
+                SpawnChoices(turn.Choices);
+                break;
+
+            case DialogueTurnAction.End:
+            default:
+                HandleHide();
+                break;
         }
     }
 
-    private void HandleShowChoices(List<PresentedChoice> choices)
+    private void OnContinueClicked()
     {
-        if (panelRoot != null) panelRoot.SetActive(true);
+        if (DialogueRunner.Instance == null) return;
+        if (DialogueRunner.Instance.IsAdvancing) return;
 
-        // With choices, we don't want the continue button visible.
-        ShowContinue(false);
-        _hasPendingPlayerLine = false;
+        if (_hasPendingPlayerReply)
+        {
+            AppendLine(_pendingPlayerSpeaker, _pendingPlayerText);
+            _hasPendingPlayerReply = false;
 
-        ClearChoices();
+            DialogueRunner.Instance.SubmitPlayerReply();
+            return;
+        }
+
+        DialogueRunner.Instance.Continue();
+    }
+
+    private void SpawnChoices(List<PresentedChoice> choices)
+    {
+        if (choices == null) return;
 
         for (int i = 0; i < choices.Count; i++)
         {
@@ -135,22 +143,16 @@ public class DialogueUI : MonoBehaviour
             _spawnedChoiceButtons.Add(btn);
 
             var txt = btn.GetComponentInChildren<Text>();
-            if (txt != null)
-                txt.text = choices[index].Text;
+            if (txt != null) txt.text = choices[index].Text;
 
             btn.onClick.AddListener(() =>
             {
-                // ✅ GATE FIRST — before doing anything else
                 if (DialogueRunner.Instance == null) return;
                 if (DialogueRunner.Instance.IsAdvancing) return;
 
-                // ✅ Append the chosen player line to dialogue history
-                AppendLine(playerSpeakerName, choices[index].Text, isPlayer: true);
+                AppendLine("Player", choices[index].Text);
 
-                // ✅ Clear UI so it can't be clicked again
                 ClearChoices();
-
-                // ✅ Advance dialogue
                 DialogueRunner.Instance.Choose(index);
             });
         }
@@ -159,37 +161,13 @@ public class DialogueUI : MonoBehaviour
     private void HandleHide()
     {
         ClearChoices();
-        _hasPendingPlayerLine = false;
+        _hasPendingPlayerReply = false;
 
         if (clearLogOnHide)
             ClearConversationLog();
 
         if (panelRoot != null)
             panelRoot.SetActive(false);
-    }
-
-    private void OnContinueClicked()
-    {
-        if (DialogueRunner.Instance == null) return;
-
-        // Runner is authoritative: ignore clicks while it is traversing auto nodes.
-        if (DialogueRunner.Instance.IsAdvancing) return;
-
-        // If player line was previewed on the button, commit it to the log now.
-        if (_hasPendingPlayerLine)
-        {
-            AppendLine(_pendingSpeaker, _pendingText, isPlayer: true);
-            _hasPendingPlayerLine = false;
-        }
-
-        DialogueRunner.Instance.Continue();
-    }
-
-
-    private bool IsPlayerSpeaker(string speaker)
-    {
-        if (string.IsNullOrEmpty(speaker)) return false;
-        return string.Equals(speaker, playerSpeakerName, System.StringComparison.OrdinalIgnoreCase);
     }
 
     private void SetContinueLabel(string label)
@@ -204,16 +182,16 @@ public class DialogueUI : MonoBehaviour
             continueButton.gameObject.SetActive(show);
     }
 
-    private void AppendLine(string speaker, string text, bool isPlayer)
+    private void AppendLine(string speaker, string text)
     {
         if (linePrefab == null || conversationContent == null || conversationScroll == null)
         {
-            Debug.LogError("[DialogueUI] Conversation log references are not set (ScrollRect/Content/LinePrefab).", this);
+            Debug.LogError("[DialogueUI] Conversation log references are not set (ScrollRect/Content/LinePrefab).");
             return;
         }
 
         var line = Instantiate(linePrefab, conversationContent);
-        line.Setup(speaker, text, isPlayer);
+        line.text = $"{speaker}: {text}";
         _spawnedLines.Add(line);
 
         if (maxLines > 0 && _spawnedLines.Count > maxLines)
@@ -223,7 +201,7 @@ public class DialogueUI : MonoBehaviour
         }
 
         Canvas.ForceUpdateCanvases();
-        conversationScroll.verticalNormalizedPosition = 0f; // scroll to bottom
+        conversationScroll.verticalNormalizedPosition = 0f;
     }
 
     public void ClearConversationLog()
@@ -233,7 +211,6 @@ public class DialogueUI : MonoBehaviour
             if (_spawnedLines[i] != null)
                 Destroy(_spawnedLines[i].gameObject);
         }
-
         _spawnedLines.Clear();
 
         if (conversationScroll != null)
@@ -250,7 +227,6 @@ public class DialogueUI : MonoBehaviour
             if (_spawnedChoiceButtons[i] != null)
                 Destroy(_spawnedChoiceButtons[i].gameObject);
         }
-
         _spawnedChoiceButtons.Clear();
     }
 }

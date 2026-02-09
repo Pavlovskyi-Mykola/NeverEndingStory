@@ -2,25 +2,50 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum DialogueTurnAction
+{
+    Continue,
+    PlayerReply,
+    Choices,
+    End
+}
+
+public struct DialogueTurn
+{
+    public bool HasNpcLine;
+    public string NpcSpeaker;
+    public string NpcText;
+
+    public DialogueTurnAction Action;
+
+    // PlayerReply
+    public string PlayerSpeaker;
+    public string PlayerText;
+
+    // Choices
+    public List<PresentedChoice> Choices;
+}
+
 public class DialogueRunner : MonoBehaviour
 {
     public static DialogueRunner Instance { get; private set; }
 
-    public event Action<string, string> OnShowLine; // speaker, text
-    public event Action<List<PresentedChoice>> OnShowChoices;
+    public event Action<DialogueTurn> OnTurn;
     public event Action OnHideDialogue;
+    public event Action<bool> OnDialogueStateChanged;
 
     private DialogueGraph _graph;
     private DialogueNode _current;
 
-    public event Action<bool> OnDialogueStateChanged;
     public bool IsRunning => _graph != null && _current != null;
 
-    /// <summary>
-    /// True while runner is traversing nodes (auto-continue via Branch/Command/GoTo).
-    /// While true, Continue/Choose calls are ignored.
-    /// </summary>
+    /// <summary>True while runner is traversing nodes; UI input should be ignored while true.</summary>
     public bool IsAdvancing { get; private set; }
+
+    // Pending reply state (UI shows it on the button; runner executes it only on submit)
+    private bool _waitingForPlayerReply;
+    private string _replyTraversalStartId;
+    private string _replyLineNodeId;
 
     private void Awake()
     {
@@ -39,21 +64,24 @@ public class DialogueRunner : MonoBehaviour
         if (_current == null)
         {
             Debug.LogWarning($"DialogueGraph '{graph.name}' has invalid StartNodeId.");
-            StopDialogue(); // will fire false
+            StopDialogue();
             return;
         }
 
         OnDialogueStateChanged?.Invoke(true);
 
-        // We are about to traverse until we hit an input node (Line/Choice) or End.
         IsAdvancing = true;
-        EnterNode(_current);
+        EmitNextTurnFrom(_current.Id);
     }
 
     public void StopDialogue()
     {
         _graph = null;
         _current = null;
+
+        _waitingForPlayerReply = false;
+        _replyTraversalStartId = null;
+        _replyLineNodeId = null;
 
         IsAdvancing = false;
 
@@ -64,24 +92,46 @@ public class DialogueRunner : MonoBehaviour
     public void Continue()
     {
         if (!IsRunning) return;
-        if (IsAdvancing) return; // 🔒 ignore double-advance during traversal
+        if (IsAdvancing) return;
+        if (_waitingForPlayerReply) return; // must submit reply instead
 
-        if (_current is LineNode line)
+        string nextId = GetNextIdFromCurrent();
+        if (string.IsNullOrEmpty(nextId)) { StopDialogue(); return; }
+
+        IsAdvancing = true;
+        EmitNextTurnFrom(nextId);
+    }
+
+    public void SubmitPlayerReply()
+    {
+        if (!IsRunning) return;
+        if (IsAdvancing) return;
+        if (!_waitingForPlayerReply) return;
+
+        IsAdvancing = true;
+
+        // Traverse executing auto nodes until we hit the expected player line
+        var node = TraverseExecuting(_replyTraversalStartId, out var endReason);
+        if (endReason == EndReason.End || node == null) { StopDialogue(); return; }
+
+        if (node.NodeType != DialogueNodeType.Line || node.Id != _replyLineNodeId)
         {
-            IsAdvancing = true;
-            GoTo(line.NextNodeId);
+            Debug.LogWarning($"[DialogueRunner] SubmitPlayerReply landed on unexpected node '{node.NodeType}({node.Id})'. Expected Line({_replyLineNodeId}).");
+            StopDialogue();
             return;
         }
 
-        if (_current is CommandNode cmd)
-        {
-            IsAdvancing = true;
-            GoTo(cmd.NextNodeId);
-            return;
-        }
+        var ln = (LineNode)node;
 
-        // Choice nodes require Choose(index)
-        // End nodes will auto-stop
+        // Execute on-enter commands at the moment player confirms the reply
+        for (int i = 0; i < ln.OnEnterCommands.Count; i++)
+            ln.OnEnterCommands[i].Execute();
+
+        _waitingForPlayerReply = false;
+
+        if (string.IsNullOrEmpty(ln.NextNodeId)) { StopDialogue(); return; }
+
+        EmitNextTurnFrom(ln.NextNodeId);
     }
 
     public void Choose(int presentedChoiceIndex)
@@ -95,101 +145,259 @@ public class DialogueRunner : MonoBehaviour
 
         var chosen = presented[presentedChoiceIndex];
 
-        // From this moment we start traversing again
         IsAdvancing = true;
 
-        // Run on-choose commands
         for (int i = 0; i < chosen.Source.OnChooseCommands.Count; i++)
             chosen.Source.OnChooseCommands[i].Execute();
 
-        GoTo(chosen.Source.NextNodeId);
+        if (string.IsNullOrEmpty(chosen.Source.NextNodeId)) { StopDialogue(); return; }
+
+        EmitNextTurnFrom(chosen.Source.NextNodeId);
     }
 
-    private void GoTo(string nodeId)
+    // -----------------------------
+    // Turn emission
+    // -----------------------------
+
+    private enum EndReason { None, End }
+
+    private void EmitNextTurnFrom(string startNodeId)
     {
-        if (string.IsNullOrEmpty(nodeId))
+        if (string.IsNullOrEmpty(startNodeId)) { StopDialogue(); return; }
+
+        // Reset pending reply unless we set it again this turn
+        _waitingForPlayerReply = false;
+        _replyTraversalStartId = null;
+        _replyLineNodeId = null;
+
+        // Traverse executing auto nodes until we reach Line/Choice/End
+        var first = TraverseExecuting(startNodeId, out var endReason);
+        if (endReason == EndReason.End || first == null) { StopDialogue(); return; }
+
+        _current = first;
+
+        var turn = new DialogueTurn();
+
+        if (first.NodeType == DialogueNodeType.Line)
         {
-            StopDialogue();
-            return;
+            var ln = (LineNode)first;
+            bool isPlayer = IsPlayerSpeakerId(ln.Speaker);
+
+            if (!isPlayer)
+            {
+                // NPC line: execute on-enter now and show it
+                for (int i = 0; i < ln.OnEnterCommands.Count; i++)
+                    ln.OnEnterCommands[i].Execute();
+
+                turn.HasNpcLine = true;
+                turn.NpcSpeaker = ln.Speaker;
+                turn.NpcText = ln.Text;
+
+                // Decide next required action
+                var next = PeekNextInput(ln.NextNodeId);
+
+                if (next.Kind == NextPeekKind.PlayerLine)
+                {
+                    turn.Action = DialogueTurnAction.PlayerReply;
+                    turn.PlayerSpeaker = next.Speaker;
+                    turn.PlayerText = next.Text;
+
+                    _waitingForPlayerReply = true;
+                    _replyTraversalStartId = ln.NextNodeId;
+                    _replyLineNodeId = next.NodeId;
+                }
+                else if (next.Kind == NextPeekKind.End)
+                {
+                    turn.Action = DialogueTurnAction.End;
+                }
+                else
+                {
+                    turn.Action = DialogueTurnAction.Continue;
+                }
+            }
+            else
+            {
+                // Player line encountered directly: show as reply button, execute on submit
+                turn.HasNpcLine = false;
+                turn.Action = DialogueTurnAction.PlayerReply;
+                turn.PlayerSpeaker = ln.Speaker;
+                turn.PlayerText = ln.Text;
+
+                _waitingForPlayerReply = true;
+                _replyTraversalStartId = ln.Id;
+                _replyLineNodeId = ln.Id;
+            }
+        }
+        else if (first.NodeType == DialogueNodeType.Choice)
+        {
+            var cn = (ChoiceNode)first;
+            turn.HasNpcLine = false;
+            turn.Action = DialogueTurnAction.Choices;
+            turn.Choices = BuildPresentedChoices(cn);
+        }
+        else
+        {
+            turn.Action = DialogueTurnAction.End;
         }
 
-        var next = _graph.GetNode(nodeId);
-        if (next == null)
-        {
-            Debug.LogWarning($"DialogueGraph '{_graph.name}' missing node '{nodeId}'.");
-            StopDialogue();
-            return;
-        }
+        IsAdvancing = false;
+        OnTurn?.Invoke(turn);
 
-        _current = next;
-        EnterNode(_current);
+        if (turn.Action == DialogueTurnAction.End)
+            StopDialogue();
     }
 
-    private void EnterNode(DialogueNode node)
+    private string GetNextIdFromCurrent()
     {
-        Debug.Log($"[DialogueRunner] Enter {node.NodeType} node: {node.Id}");
+        if (_current == null) return null;
 
-        // If we are entering an auto node, we should be advancing.
-        if (IsAutoNode(node.NodeType)) IsAdvancing = true;
-
-        switch (node.NodeType)
+        return _current.NodeType switch
         {
-            case DialogueNodeType.Line:
-                {
-                    var ln = (LineNode)node;
+            DialogueNodeType.Line => ((LineNode)_current).NextNodeId,
+            DialogueNodeType.Command => ((CommandNode)_current).NextNodeId,
+            _ => null
+        };
+    }
 
-                    // On-enter commands (optional)
-                    for (int i = 0; i < ln.OnEnterCommands.Count; i++)
-                        ln.OnEnterCommands[i].Execute();
+    // -----------------------------
+    // Traversal (executing)
+    // -----------------------------
 
-                    // ✅ We are now waiting for user input (Continue)
-                    IsAdvancing = false;
-                    OnShowLine?.Invoke(ln.Speaker, ln.Text);
-                    break;
-                }
+    private DialogueNode TraverseExecuting(string startId, out EndReason endReason)
+    {
+        endReason = EndReason.None;
 
-            case DialogueNodeType.Choice:
-                {
-                    var cn = (ChoiceNode)node;
-                    var presented = BuildPresentedChoices(cn);
+        var safety = 0;
+        var node = _graph.GetNode(startId);
 
-                    // ✅ We are now waiting for user input (Choose)
-                    IsAdvancing = false;
-                    OnShowChoices?.Invoke(presented);
-                    break;
-                }
+        while (node != null && safety++ < 256)
+        {
+            switch (node.NodeType)
+            {
+                case DialogueNodeType.Command:
+                    {
+                        var cmd = (CommandNode)node;
+                        for (int i = 0; i < cmd.Commands.Count; i++)
+                            cmd.Commands[i].Execute();
 
-            case DialogueNodeType.Branch:
-                {
-                    var bn = (BranchNode)node;
-                    bool result = bn.Condition == null || bn.Condition.Evaluate();
+                        if (string.IsNullOrEmpty(cmd.NextNodeId))
+                        {
+                            endReason = EndReason.End;
+                            return null;
+                        }
 
-                    // Still traversing automatically
-                    IsAdvancing = true;
-                    GoTo(result ? bn.TrueNextNodeId : bn.FalseNextNodeId);
-                    break;
-                }
+                        node = _graph.GetNode(cmd.NextNodeId);
+                        break;
+                    }
 
-            case DialogueNodeType.Command:
-                {
-                    var cmd = (CommandNode)node;
+                case DialogueNodeType.Branch:
+                    {
+                        var bn = (BranchNode)node;
+                        bool result = bn.Condition == null || bn.Condition.Evaluate();
+                        var next = result ? bn.TrueNextNodeId : bn.FalseNextNodeId;
 
-                    for (int i = 0; i < cmd.Commands.Count; i++)
-                        cmd.Commands[i].Execute();
+                        if (string.IsNullOrEmpty(next))
+                        {
+                            endReason = EndReason.End;
+                            return null;
+                        }
 
-                    // Still traversing automatically
-                    IsAdvancing = true;
+                        node = _graph.GetNode(next);
+                        break;
+                    }
 
-                    // auto-continue
-                    GoTo(cmd.NextNodeId);
-                    break;
-                }
+                case DialogueNodeType.End:
+                    endReason = EndReason.End;
+                    return null;
 
-            case DialogueNodeType.End:
-            default:
-                StopDialogue();
-                break;
+                case DialogueNodeType.Line:
+                case DialogueNodeType.Choice:
+                    return node;
+
+                default:
+                    Debug.LogWarning($"[DialogueRunner] Unknown node type '{node.NodeType}'.");
+                    endReason = EndReason.End;
+                    return null;
+            }
         }
+
+        endReason = EndReason.End;
+        return null;
+    }
+
+    // -----------------------------
+    // Peek (non-executing)
+    // -----------------------------
+
+    private enum NextPeekKind { None, NpcLine, PlayerLine, Choice, End }
+
+    private struct NextPeekInfo
+    {
+        public NextPeekKind Kind;
+        public string NodeId;
+        public string Speaker;
+        public string Text;
+    }
+
+    private NextPeekInfo PeekNextInput(string startId)
+    {
+        if (string.IsNullOrEmpty(startId))
+            return new NextPeekInfo { Kind = NextPeekKind.End };
+
+        var safety = 0;
+        var node = _graph.GetNode(startId);
+
+        while (node != null && safety++ < 256)
+        {
+            switch (node.NodeType)
+            {
+                case DialogueNodeType.Line:
+                    {
+                        var ln = (LineNode)node;
+                        bool isPlayer = IsPlayerSpeakerId(ln.Speaker);
+                        return new NextPeekInfo
+                        {
+                            Kind = isPlayer ? NextPeekKind.PlayerLine : NextPeekKind.NpcLine,
+                            NodeId = ln.Id,
+                            Speaker = ln.Speaker,
+                            Text = ln.Text
+                        };
+                    }
+
+                case DialogueNodeType.Choice:
+                    return new NextPeekInfo { Kind = NextPeekKind.Choice };
+
+                case DialogueNodeType.End:
+                    return new NextPeekInfo { Kind = NextPeekKind.End };
+
+                case DialogueNodeType.Command:
+                    {
+                        var cmd = (CommandNode)node;
+                        if (string.IsNullOrEmpty(cmd.NextNodeId))
+                            return new NextPeekInfo { Kind = NextPeekKind.End };
+                        node = _graph.GetNode(cmd.NextNodeId);
+                        break;
+                    }
+
+                case DialogueNodeType.Branch:
+                    {
+                        var bn = (BranchNode)node;
+                        bool result = bn.Condition == null || bn.Condition.Evaluate();
+                        var next = result ? bn.TrueNextNodeId : bn.FalseNextNodeId;
+
+                        if (string.IsNullOrEmpty(next))
+                            return new NextPeekInfo { Kind = NextPeekKind.End };
+
+                        node = _graph.GetNode(next);
+                        break;
+                    }
+
+                default:
+                    return new NextPeekInfo { Kind = NextPeekKind.None };
+            }
+        }
+
+        return new NextPeekInfo { Kind = NextPeekKind.None };
     }
 
     private static List<PresentedChoice> BuildPresentedChoices(ChoiceNode cn)
@@ -205,21 +413,12 @@ public class DialogueRunner : MonoBehaviour
         }
         return result;
     }
-    public string DebugCurrentNodeInfo
+
+    private bool IsPlayerSpeakerId(string speaker)
     {
-        get
-        {
-            if (_current == null) return "(null)";
-            return $"{_current.NodeType}({_current.Id})";
-        }
+        if (string.IsNullOrWhiteSpace(speaker)) return false;
+        return string.Equals(speaker.Trim(), "Player", StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsInputNode(DialogueNodeType t)
-        => t == DialogueNodeType.Line || t == DialogueNodeType.Choice;
-
-    private static bool IsAutoNode(DialogueNodeType t)
-        => t == DialogueNodeType.Command || t == DialogueNodeType.Branch;
-
 }
 
 public struct PresentedChoice
@@ -227,4 +426,3 @@ public struct PresentedChoice
     public string Text;
     public DialogueChoice Source;
 }
-
