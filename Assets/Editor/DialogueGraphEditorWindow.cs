@@ -129,12 +129,6 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             EnsureSerialized();
 
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField("Start Node", GUILayout.Width(80));
-                EditorGUILayout.PropertyField(_startNodeIdProp, GUIContent.none);
-            }
-
             EditorGUILayout.Space(8);
 
             EditorGUILayout.LabelField("Create Nodes", EditorStyles.boldLabel);
@@ -655,12 +649,6 @@ public class DialogueGraphEditorWindow : EditorWindow
 
         EditorGUILayout.LabelField(GetNodeTitle(nodeProp), EditorStyles.boldLabel);
 
-        var idProp = nodeProp.FindPropertyRelative("id");
-        using (new EditorGUI.DisabledScope(true))
-        {
-            EditorGUILayout.PropertyField(idProp, new GUIContent("Id"));
-        }
-
         EditorGUILayout.Space(6);
 
         switch (type)
@@ -687,7 +675,6 @@ public class DialogueGraphEditorWindow : EditorWindow
 
                     EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("text"));
                     EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("onEnterCommands"), true);
-                    EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("nextNodeId"));
                     break;
                 }
 
@@ -697,13 +684,11 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             case DialogueNodeType.Branch:
                 EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("condition"), true);
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("trueNextNodeId"));
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("falseNextNodeId"));
+
                 break;
 
             case DialogueNodeType.Command:
                 EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("commands"), true);
-                EditorGUILayout.PropertyField(nodeProp.FindPropertyRelative("nextNodeId"));
                 break;
 
             case DialogueNodeType.End:
@@ -715,15 +700,6 @@ public class DialogueGraphEditorWindow : EditorWindow
             ApplyModified();
 
         EditorGUILayout.Space(10);
-
-        using (new EditorGUILayout.HorizontalScope())
-        {
-            if (GUILayout.Button("Set As Start"))
-            {
-                _startNodeIdProp.stringValue = idProp.stringValue;
-                ApplyModified();
-            }
-        }
     }
 
     // ---------------- Connections drawing ----------------
