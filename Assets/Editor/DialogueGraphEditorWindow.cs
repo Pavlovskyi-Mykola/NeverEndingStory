@@ -67,10 +67,10 @@ public class DialogueGraphEditorWindow : EditorWindow
     {
         DrawTopToolbar();
 
-        // Keyboard delete for selected node (Backspace/Delete)
+        // Keyboard delete for selected node (Delete)
         if (Event.current.type == EventType.KeyDown && HasSelection)
         {
-            if (Event.current.keyCode == KeyCode.Backspace || Event.current.keyCode == KeyCode.Delete)
+            if (Event.current.keyCode == KeyCode.Delete)
             {
                 DeleteSelectedNode();
                 Event.current.Use();
