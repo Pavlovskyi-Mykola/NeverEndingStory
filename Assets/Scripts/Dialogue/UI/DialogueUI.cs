@@ -96,7 +96,7 @@ public class DialogueUI : MonoBehaviour
 
         if (isPlayer)
         {
-            // Show the player's upcoming line on the button (do not append yet)
+            // Player line: preview on button, only append on click
             _hasPendingPlayerLine = true;
             _pendingSpeaker = speaker;
             _pendingText = text;
@@ -106,13 +106,21 @@ public class DialogueUI : MonoBehaviour
         }
         else
         {
-            // NPC (or narrator) lines: append immediately
+            // NPC line: append immediately, button just says "Continue"
             AppendLine(speaker, text);
 
-            SetContinueLabel("Next");
+            SetContinueLabel("Continue");
             ShowContinue(true);
         }
     }
+
+    private System.Collections.IEnumerator ContinueNextFrame()
+    {
+        yield return null;
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.Continue();
+    }
+
 
     private void HandleShowChoices(List<PresentedChoice> choices)
     {
