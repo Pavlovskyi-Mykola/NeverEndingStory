@@ -5,6 +5,8 @@ public class NpcManager : MonoBehaviour
 {
     public static NpcManager Instance { get; private set; }
 
+    public const string PlayerSpeakerId = "Player";
+
     public IReadOnlyList<NpcDefinition> Npcs => npcs;
 
     [Header("NPC Database")]
@@ -140,7 +142,7 @@ public class NpcManager : MonoBehaviour
 
     public List<string> GetAllSpeakerIds()
     {
-        var result = new List<string> { "Player" };
+        var result = new List<string> { PlayerSpeakerId };
 
         for (int i = 0; i < npcs.Count; i++)
         {
