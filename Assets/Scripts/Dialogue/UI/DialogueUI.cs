@@ -15,10 +15,14 @@ public class DialogueUI : MonoBehaviour
 
     [Header("Controls")]
     [SerializeField] private Button continueButton;
+    [SerializeField] private Text continueButtonLabel; // assign Text component inside the button
 
     [Header("Choices")]
     [SerializeField] private Transform choicesRoot;
     [SerializeField] private Button choiceButtonPrefab;
+
+    [Header("Speaker Mapping")]
+    [SerializeField] private string playerSpeakerName = "Player"; // must match speaker value in your dialogue graph
 
     [Header("Behavior")]
     [SerializeField] private bool clearLogOnHide = false;
@@ -28,10 +32,13 @@ public class DialogueUI : MonoBehaviour
 
     private bool _subscribed;
 
+    // Buffer for "player line shown on button"
+    private bool _hasPendingPlayerLine;
+    private string _pendingSpeaker;
+    private string _pendingText;
+
     private void Awake()
     {
-        // Important: this component should live on an object that stays ACTIVE.
-        // Only panelRoot should be toggled on/off.
         TrySubscribe();
         if (panelRoot != null) panelRoot.SetActive(false);
     }
@@ -67,12 +74,14 @@ public class DialogueUI : MonoBehaviour
     private void Unsubscribe()
     {
         if (!_subscribed) return;
+
         if (DialogueRunner.Instance != null)
         {
             DialogueRunner.Instance.OnShowLine -= HandleShowLine;
             DialogueRunner.Instance.OnShowChoices -= HandleShowChoices;
             DialogueRunner.Instance.OnHideDialogue -= HandleHide;
         }
+
         _subscribed = false;
     }
 
@@ -81,19 +90,37 @@ public class DialogueUI : MonoBehaviour
         if (panelRoot != null) panelRoot.SetActive(true);
 
         ClearChoices();
+        _hasPendingPlayerLine = false;
 
-        AppendLine(speaker, text);
+        bool isPlayer = IsPlayerSpeaker(speaker);
 
-        if (continueButton != null)
-            continueButton.gameObject.SetActive(true);
+        if (isPlayer)
+        {
+            // Show the player's upcoming line on the button (do not append yet)
+            _hasPendingPlayerLine = true;
+            _pendingSpeaker = speaker;
+            _pendingText = text;
+
+            SetContinueLabel(text);
+            ShowContinue(true);
+        }
+        else
+        {
+            // NPC (or narrator) lines: append immediately
+            AppendLine(speaker, text);
+
+            SetContinueLabel("Next");
+            ShowContinue(true);
+        }
     }
 
     private void HandleShowChoices(List<PresentedChoice> choices)
     {
         if (panelRoot != null) panelRoot.SetActive(true);
 
-        if (continueButton != null)
-            continueButton.gameObject.SetActive(false);
+        // With choices, we don't want "Next" visible
+        ShowContinue(false);
+        _hasPendingPlayerLine = false;
 
         ClearChoices();
 
@@ -109,6 +136,11 @@ public class DialogueUI : MonoBehaviour
 
             btn.onClick.AddListener(() =>
             {
+                // Show the player choice in the conversation log (this was missing before)
+                AppendLine(playerSpeakerName, choices[index].Text);
+
+                ClearChoices(); // prevent double-click spam
+
                 if (DialogueRunner.Instance != null)
                     DialogueRunner.Instance.Choose(index);
             });
@@ -118,6 +150,7 @@ public class DialogueUI : MonoBehaviour
     private void HandleHide()
     {
         ClearChoices();
+        _hasPendingPlayerLine = false;
 
         if (clearLogOnHide)
             ClearConversationLog();
@@ -128,8 +161,34 @@ public class DialogueUI : MonoBehaviour
 
     private void OnContinueClicked()
     {
-        if (DialogueRunner.Instance != null)
-            DialogueRunner.Instance.Continue();
+        if (DialogueRunner.Instance == null) return;
+
+        // If player line was “previewed” on the button, commit it to the log now.
+        if (_hasPendingPlayerLine)
+        {
+            AppendLine(_pendingSpeaker, _pendingText);
+            _hasPendingPlayerLine = false;
+        }
+
+        DialogueRunner.Instance.Continue();
+    }
+
+    private bool IsPlayerSpeaker(string speaker)
+    {
+        if (string.IsNullOrEmpty(speaker)) return false;
+        return string.Equals(speaker, playerSpeakerName, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void SetContinueLabel(string label)
+    {
+        if (continueButtonLabel != null)
+            continueButtonLabel.text = label;
+    }
+
+    private void ShowContinue(bool show)
+    {
+        if (continueButton != null)
+            continueButton.gameObject.SetActive(show);
     }
 
     private void AppendLine(string speaker, string text)
@@ -151,7 +210,7 @@ public class DialogueUI : MonoBehaviour
         }
 
         Canvas.ForceUpdateCanvases();
-        conversationScroll.verticalNormalizedPosition = 0f; // scroll to bottom
+        conversationScroll.verticalNormalizedPosition = 0f;
     }
 
     public void ClearConversationLog()
