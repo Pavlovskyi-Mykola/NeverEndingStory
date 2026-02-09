@@ -10,24 +10,25 @@ public class DialogueUI : MonoBehaviour
     [Header("Scrollable Conversation Log")]
     [SerializeField] private ScrollRect conversationScroll;
     [SerializeField] private Transform conversationContent;
-    [SerializeField] private Text linePrefab;
+    [SerializeField] private DialogueLineUI linePrefab;
     [SerializeField] private int maxLines = 200;
 
     [Header("Controls")]
     [SerializeField] private Button continueButton;
-    [SerializeField] private Text continueButtonLabel; // assign Text component inside the button
+    [SerializeField] private Text continueButtonLabel; // Text component inside the button
 
     [Header("Choices")]
     [SerializeField] private Transform choicesRoot;
     [SerializeField] private Button choiceButtonPrefab;
 
     [Header("Speaker Mapping")]
-    [SerializeField] private string playerSpeakerName = "Player"; // must match speaker value in your dialogue graph
+    [Tooltip("Must match the speaker value used in your dialogue graph for player lines.")]
+    [SerializeField] private string playerSpeakerName = "Player";
 
     [Header("Behavior")]
     [SerializeField] private bool clearLogOnHide = false;
 
-    private readonly List<Text> _spawnedLines = new();
+    private readonly List<DialogueLineUI> _spawnedLines = new();
     private readonly List<Button> _spawnedChoiceButtons = new();
 
     private bool _subscribed;
@@ -39,6 +40,8 @@ public class DialogueUI : MonoBehaviour
 
     private void Awake()
     {
+        // IMPORTANT: keep this component on an always-active object.
+        // Toggle panelRoot only (panelRoot can be inactive at start).
         TrySubscribe();
         if (panelRoot != null) panelRoot.SetActive(false);
     }
@@ -107,26 +110,18 @@ public class DialogueUI : MonoBehaviour
         else
         {
             // NPC line: append immediately, button just says "Continue"
-            AppendLine(speaker, text);
+            AppendLine(speaker, text, isPlayer: false);
 
             SetContinueLabel("Continue");
             ShowContinue(true);
         }
     }
 
-    private System.Collections.IEnumerator ContinueNextFrame()
-    {
-        yield return null;
-        if (DialogueRunner.Instance != null)
-            DialogueRunner.Instance.Continue();
-    }
-
-
     private void HandleShowChoices(List<PresentedChoice> choices)
     {
         if (panelRoot != null) panelRoot.SetActive(true);
 
-        // With choices, we don't want "Next" visible
+        // With choices, we don't want the continue button visible.
         ShowContinue(false);
         _hasPendingPlayerLine = false;
 
@@ -144,8 +139,8 @@ public class DialogueUI : MonoBehaviour
 
             btn.onClick.AddListener(() =>
             {
-                // Show the player choice in the conversation log (this was missing before)
-                AppendLine(playerSpeakerName, choices[index].Text);
+                // Show the player choice in the conversation log
+                AppendLine(playerSpeakerName, choices[index].Text, isPlayer: true);
 
                 ClearChoices(); // prevent double-click spam
 
@@ -171,10 +166,10 @@ public class DialogueUI : MonoBehaviour
     {
         if (DialogueRunner.Instance == null) return;
 
-        // If player line was “previewed” on the button, commit it to the log now.
+        // If player line was previewed on the button, commit it to the log now.
         if (_hasPendingPlayerLine)
         {
-            AppendLine(_pendingSpeaker, _pendingText);
+            AppendLine(_pendingSpeaker, _pendingText, isPlayer: true);
             _hasPendingPlayerLine = false;
         }
 
@@ -199,16 +194,16 @@ public class DialogueUI : MonoBehaviour
             continueButton.gameObject.SetActive(show);
     }
 
-    private void AppendLine(string speaker, string text)
+    private void AppendLine(string speaker, string text, bool isPlayer)
     {
         if (linePrefab == null || conversationContent == null || conversationScroll == null)
         {
-            Debug.LogError("[DialogueUI] Conversation log references are not set (ScrollRect/Content/LinePrefab).");
+            Debug.LogError("[DialogueUI] Conversation log references are not set (ScrollRect/Content/LinePrefab).", this);
             return;
         }
 
         var line = Instantiate(linePrefab, conversationContent);
-        line.text = $"{speaker}: {text}";
+        line.Setup(speaker, text, isPlayer);
         _spawnedLines.Add(line);
 
         if (maxLines > 0 && _spawnedLines.Count > maxLines)
@@ -218,7 +213,7 @@ public class DialogueUI : MonoBehaviour
         }
 
         Canvas.ForceUpdateCanvases();
-        conversationScroll.verticalNormalizedPosition = 0f;
+        conversationScroll.verticalNormalizedPosition = 0f; // scroll to bottom
     }
 
     public void ClearConversationLog()
@@ -228,6 +223,7 @@ public class DialogueUI : MonoBehaviour
             if (_spawnedLines[i] != null)
                 Destroy(_spawnedLines[i].gameObject);
         }
+
         _spawnedLines.Clear();
 
         if (conversationScroll != null)
@@ -244,6 +240,7 @@ public class DialogueUI : MonoBehaviour
             if (_spawnedChoiceButtons[i] != null)
                 Destroy(_spawnedChoiceButtons[i].gameObject);
         }
+
         _spawnedChoiceButtons.Clear();
     }
 }
