@@ -212,8 +212,12 @@ public class DialogueGraphEditorWindow : EditorWindow
         var innerRect = new Rect(0, 0, 5000, 5000);
         _canvasScroll = GUI.BeginScrollView(canvasRect, _canvasScroll, innerRect);
 
-        // Track mouse in canvas coordinates
-        _lastCanvasMouse = Event.current.mousePosition + _canvasScroll;
+        // Track mouse in canvas (content) coordinates.
+        // NOTE: Inside BeginScrollView, IMGUI already reports Event.current.mousePosition
+        // in the scrolled content space. Adding _canvasScroll again will double-apply
+        // the offset, which breaks node hit-testing, dragging, and node creation after panning.
+        _lastCanvasMouse = Event.current.mousePosition;
+
 
         // Left-click empty canvas to deselect the current node.
         // IMPORTANT: only if the click wasn't already used by a node window.
