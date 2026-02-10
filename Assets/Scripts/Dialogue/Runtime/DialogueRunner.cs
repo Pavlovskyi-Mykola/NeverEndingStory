@@ -4,10 +4,10 @@ using UnityEngine;
 
 public enum DialogueTurnAction
 {
-    Continue,
-    PlayerReply,
-    Choices,
-    End
+    Continue,    // show "Continue"
+    PlayerReply, // show player's reply text on the button (confirm to "say" it)
+    Choices,     // show list of choices
+    Close        // show final "Continue/Close" button at the end
 }
 
 public struct DialogueTurn
@@ -42,10 +42,16 @@ public class DialogueRunner : MonoBehaviour
     /// <summary>True while runner is traversing nodes; UI input should be ignored while true.</summary>
     public bool IsAdvancing { get; private set; }
 
-    // Pending reply state (UI shows it on the button; runner executes it only on submit)
+    // Pending player reply state: UI displays it on the button; runner executes it only on submit
     private bool _waitingForPlayerReply;
     private string _replyTraversalStartId;
     private string _replyLineNodeId;
+
+    // Close step state
+    private bool _waitingForClose;
+
+    // You can later replace this with NpcManager.PlayerSpeakerId if you want
+    private const string PlayerSpeakerId = "Player";
 
     private void Awake()
     {
@@ -83,20 +89,38 @@ public class DialogueRunner : MonoBehaviour
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
 
+        _waitingForClose = false;
+
         IsAdvancing = false;
 
         OnDialogueStateChanged?.Invoke(false);
         OnHideDialogue?.Invoke();
     }
 
+    public void CloseDialogue()
+    {
+        StopDialogue();
+    }
+
     public void Continue()
     {
         if (!IsRunning) return;
         if (IsAdvancing) return;
-        if (_waitingForPlayerReply) return; // must submit reply instead
+
+        if (_waitingForClose)
+        {
+            StopDialogue();
+            return;
+        }
+
+        if (_waitingForPlayerReply)
+        {
+            // UI must call SubmitPlayerReply()
+            return;
+        }
 
         string nextId = GetNextIdFromCurrent();
-        if (string.IsNullOrEmpty(nextId)) { StopDialogue(); return; }
+        if (string.IsNullOrEmpty(nextId)) { EmitCloseTurn(); return; }
 
         IsAdvancing = true;
         EmitNextTurnFrom(nextId);
@@ -110,14 +134,13 @@ public class DialogueRunner : MonoBehaviour
 
         IsAdvancing = true;
 
-        // Traverse executing auto nodes until we hit the expected player line
         var node = TraverseExecuting(_replyTraversalStartId, out var endReason);
-        if (endReason == EndReason.End || node == null) { StopDialogue(); return; }
+        if (endReason == EndReason.End || node == null) { EmitCloseTurn(); return; }
 
         if (node.NodeType != DialogueNodeType.Line || node.Id != _replyLineNodeId)
         {
             Debug.LogWarning($"[DialogueRunner] SubmitPlayerReply landed on unexpected node '{node.NodeType}({node.Id})'. Expected Line({_replyLineNodeId}).");
-            StopDialogue();
+            EmitCloseTurn();
             return;
         }
 
@@ -129,7 +152,7 @@ public class DialogueRunner : MonoBehaviour
 
         _waitingForPlayerReply = false;
 
-        if (string.IsNullOrEmpty(ln.NextNodeId)) { StopDialogue(); return; }
+        if (string.IsNullOrEmpty(ln.NextNodeId)) { EmitCloseTurn(); return; }
 
         EmitNextTurnFrom(ln.NextNodeId);
     }
@@ -150,7 +173,7 @@ public class DialogueRunner : MonoBehaviour
         for (int i = 0; i < chosen.Source.OnChooseCommands.Count; i++)
             chosen.Source.OnChooseCommands[i].Execute();
 
-        if (string.IsNullOrEmpty(chosen.Source.NextNodeId)) { StopDialogue(); return; }
+        if (string.IsNullOrEmpty(chosen.Source.NextNodeId)) { EmitCloseTurn(); return; }
 
         EmitNextTurnFrom(chosen.Source.NextNodeId);
     }
@@ -163,16 +186,24 @@ public class DialogueRunner : MonoBehaviour
 
     private void EmitNextTurnFrom(string startNodeId)
     {
-        if (string.IsNullOrEmpty(startNodeId)) { StopDialogue(); return; }
+        if (string.IsNullOrEmpty(startNodeId))
+        {
+            EmitCloseTurn();
+            return;
+        }
 
-        // Reset pending reply unless we set it again this turn
+        // Reset per-turn input states unless we set them again this turn
         _waitingForPlayerReply = false;
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
+        _waitingForClose = false;
 
-        // Traverse executing auto nodes until we reach Line/Choice/End
         var first = TraverseExecuting(startNodeId, out var endReason);
-        if (endReason == EndReason.End || first == null) { StopDialogue(); return; }
+        if (endReason == EndReason.End || first == null)
+        {
+            EmitCloseTurn();
+            return;
+        }
 
         _current = first;
 
@@ -193,7 +224,7 @@ public class DialogueRunner : MonoBehaviour
                 turn.NpcSpeaker = ln.Speaker;
                 turn.NpcText = ln.Text;
 
-                // Decide next required action
+                // Decide next required action (peek only; does not execute)
                 var next = PeekNextInput(ln.NextNodeId);
 
                 if (next.Kind == NextPeekKind.PlayerLine)
@@ -208,16 +239,18 @@ public class DialogueRunner : MonoBehaviour
                 }
                 else if (next.Kind == NextPeekKind.End)
                 {
-                    turn.Action = DialogueTurnAction.End;
+                    turn.Action = DialogueTurnAction.Close;
+                    _waitingForClose = true;
                 }
                 else
                 {
+                    // next is NPC line or choices -> user must "Continue"
                     turn.Action = DialogueTurnAction.Continue;
                 }
             }
             else
             {
-                // Player line encountered directly: show as reply button, execute on submit
+                // Player line encountered directly: show reply button, execute on submit
                 turn.HasNpcLine = false;
                 turn.Action = DialogueTurnAction.PlayerReply;
                 turn.PlayerSpeaker = ln.Speaker;
@@ -237,14 +270,36 @@ public class DialogueRunner : MonoBehaviour
         }
         else
         {
-            turn.Action = DialogueTurnAction.End;
+            // Anything unexpected -> close gracefully
+            turn.Action = DialogueTurnAction.Close;
+            _waitingForClose = true;
         }
 
         IsAdvancing = false;
         OnTurn?.Invoke(turn);
+    }
 
-        if (turn.Action == DialogueTurnAction.End)
+    private void EmitCloseTurn()
+    {
+        if (!IsRunning)
+        {
+            // If already stopped, don't emit anything
             StopDialogue();
+            return;
+        }
+
+        _waitingForPlayerReply = false;
+        _replyTraversalStartId = null;
+        _replyLineNodeId = null;
+
+        _waitingForClose = true;
+        IsAdvancing = false;
+
+        OnTurn?.Invoke(new DialogueTurn
+        {
+            HasNpcLine = false,
+            Action = DialogueTurnAction.Close
+        });
     }
 
     private string GetNextIdFromCurrent()
@@ -417,7 +472,7 @@ public class DialogueRunner : MonoBehaviour
     private bool IsPlayerSpeakerId(string speaker)
     {
         if (string.IsNullOrWhiteSpace(speaker)) return false;
-        return string.Equals(speaker.Trim(), "Player", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(speaker.Trim(), PlayerSpeakerId, StringComparison.OrdinalIgnoreCase);
     }
 }
 

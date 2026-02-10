@@ -10,7 +10,7 @@ public class DialogueUI : MonoBehaviour
     [Header("Scrollable Conversation Log")]
     [SerializeField] private ScrollRect conversationScroll;
     [SerializeField] private Transform conversationContent;
-    [SerializeField] private Text linePrefab;
+    [SerializeField] private DialogueLineUI linePrefab;
     [SerializeField] private int maxLines = 200;
 
     [Header("Controls")]
@@ -21,17 +21,23 @@ public class DialogueUI : MonoBehaviour
     [SerializeField] private Transform choicesRoot;
     [SerializeField] private Button choiceButtonPrefab;
 
+    [Header("Speaker Mapping")]
+    [SerializeField] private string playerSpeakerName = "Player";
+
     [Header("Behavior")]
     [SerializeField] private bool clearLogOnHide = false;
+    [SerializeField] private string closeButtonLabel = "Continue"; // change to "Close" if you prefer
 
-    private readonly List<Text> _spawnedLines = new();
+    private readonly List<DialogueLineUI> _spawnedLines = new();
     private readonly List<Button> _spawnedChoiceButtons = new();
 
     private bool _subscribed;
 
+    private DialogueTurnAction _currentAction;
+
     private bool _hasPendingPlayerReply;
-    private string _pendingPlayerSpeaker;
-    private string _pendingPlayerText;
+    private string _pendingSpeaker;
+    private string _pendingText;
 
     private void Awake()
     {
@@ -61,7 +67,6 @@ public class DialogueUI : MonoBehaviour
 
         DialogueRunner.Instance.OnTurn += HandleTurn;
         DialogueRunner.Instance.OnHideDialogue += HandleHide;
-
         _subscribed = true;
     }
 
@@ -83,8 +88,11 @@ public class DialogueUI : MonoBehaviour
         ClearChoices();
         _hasPendingPlayerReply = false;
 
+        _currentAction = turn.Action;
+
+        // Append NPC line if provided
         if (turn.HasNpcLine)
-            AppendLine(turn.NpcSpeaker, turn.NpcText);
+            AppendLine(turn.NpcSpeaker, turn.NpcText, isPlayer: false);
 
         switch (turn.Action)
         {
@@ -95,8 +103,8 @@ public class DialogueUI : MonoBehaviour
 
             case DialogueTurnAction.PlayerReply:
                 _hasPendingPlayerReply = true;
-                _pendingPlayerSpeaker = string.IsNullOrWhiteSpace(turn.PlayerSpeaker) ? "Player" : turn.PlayerSpeaker;
-                _pendingPlayerText = turn.PlayerText;
+                _pendingSpeaker = string.IsNullOrWhiteSpace(turn.PlayerSpeaker) ? playerSpeakerName : turn.PlayerSpeaker;
+                _pendingText = turn.PlayerText;
 
                 ShowContinue(true);
                 SetContinueLabel(turn.PlayerText);
@@ -107,9 +115,9 @@ public class DialogueUI : MonoBehaviour
                 SpawnChoices(turn.Choices);
                 break;
 
-            case DialogueTurnAction.End:
-            default:
-                HandleHide();
+            case DialogueTurnAction.Close:
+                ShowContinue(true);
+                SetContinueLabel(closeButtonLabel);
                 break;
         }
     }
@@ -119,9 +127,15 @@ public class DialogueUI : MonoBehaviour
         if (DialogueRunner.Instance == null) return;
         if (DialogueRunner.Instance.IsAdvancing) return;
 
+        if (_currentAction == DialogueTurnAction.Close)
+        {
+            DialogueRunner.Instance.CloseDialogue();
+            return;
+        }
+
         if (_hasPendingPlayerReply)
         {
-            AppendLine(_pendingPlayerSpeaker, _pendingPlayerText);
+            AppendLine(_pendingSpeaker, _pendingText, isPlayer: true);
             _hasPendingPlayerReply = false;
 
             DialogueRunner.Instance.SubmitPlayerReply();
@@ -150,7 +164,7 @@ public class DialogueUI : MonoBehaviour
                 if (DialogueRunner.Instance == null) return;
                 if (DialogueRunner.Instance.IsAdvancing) return;
 
-                AppendLine("Player", choices[index].Text);
+                AppendLine(playerSpeakerName, choices[index].Text, isPlayer: true);
 
                 ClearChoices();
                 DialogueRunner.Instance.Choose(index);
@@ -182,16 +196,22 @@ public class DialogueUI : MonoBehaviour
             continueButton.gameObject.SetActive(show);
     }
 
-    private void AppendLine(string speaker, string text)
+    private bool IsPlayerSpeaker(string speaker)
+    {
+        if (string.IsNullOrWhiteSpace(speaker)) return false;
+        return string.Equals(speaker.Trim(), playerSpeakerName.Trim(), System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void AppendLine(string speaker, string text, bool isPlayer)
     {
         if (linePrefab == null || conversationContent == null || conversationScroll == null)
         {
-            Debug.LogError("[DialogueUI] Conversation log references are not set (ScrollRect/Content/LinePrefab).");
+            Debug.LogError("[DialogueUI] Conversation log references are not set (ScrollRect/Content/LinePrefab).", this);
             return;
         }
 
         var line = Instantiate(linePrefab, conversationContent);
-        line.text = $"{speaker}: {text}";
+        line.Setup(speaker, text, isPlayer);
         _spawnedLines.Add(line);
 
         if (maxLines > 0 && _spawnedLines.Count > maxLines)
@@ -199,6 +219,9 @@ public class DialogueUI : MonoBehaviour
             Destroy(_spawnedLines[0].gameObject);
             _spawnedLines.RemoveAt(0);
         }
+
+        // Layout refresh (helps avoid overlap)
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)conversationContent);
 
         Canvas.ForceUpdateCanvases();
         conversationScroll.verticalNormalizedPosition = 0f;
@@ -211,6 +234,7 @@ public class DialogueUI : MonoBehaviour
             if (_spawnedLines[i] != null)
                 Destroy(_spawnedLines[i].gameObject);
         }
+
         _spawnedLines.Clear();
 
         if (conversationScroll != null)
