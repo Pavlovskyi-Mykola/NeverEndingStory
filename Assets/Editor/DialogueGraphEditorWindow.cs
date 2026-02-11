@@ -334,6 +334,16 @@ public class DialogueGraphEditorWindow : EditorWindow
         }
         EndWindows();
 
+        // When a connection is pending, LMB on empty canvas opens "Create node" menu and auto-connects.
+        if (_pending.IsActive &&
+            Event.current.type == EventType.MouseDown &&
+            Event.current.button == 0 &&
+            !IsMouseOverAnyNode(_lastCanvasMouse))
+        {
+            ShowCreateAndConnectMenu(_lastCanvasMouse);
+            Event.current.Use();
+        }
+
         // Frame selected node with F
         if (Event.current.type == EventType.KeyDown &&
             Event.current.keyCode == KeyCode.F &&
@@ -890,15 +900,24 @@ public class DialogueGraphEditorWindow : EditorWindow
         CreateNodeInternal(nodeType, _lastCanvasMouse, autoConnectFromSelected: true);
     }
 
-    private void CreateNodeInternal(Type nodeType, Vector2 canvasPos, bool autoConnectFromSelected)
+    private string CreateNodeInternal(Type nodeType, Vector2 canvasPos, bool autoConnectFromSelected)
     {
-        if (_graph == null) return;
+        if (_graph == null) return null;
         EnsureSerialized();
 
+        // IMPORTANT: do NOT use InsertArrayElementAtIndex for SerializeReference nodes.
+        // It clones the previous element and can resurrect deleted nodes.
         int idx = _nodesProp.arraySize;
-        _nodesProp.InsertArrayElementAtIndex(idx);
-
+        _nodesProp.arraySize++;
         var newElem = _nodesProp.GetArrayElementAtIndex(idx);
+
+        // Hard reset slot
+        newElem.managedReferenceValue = null;
+        ApplyModified();
+
+        // Re-fetch after apply
+        EnsureSerialized();
+        newElem = _nodesProp.GetArrayElementAtIndex(idx);
 
         string guid = Guid.NewGuid().ToString("N");
         object instance;
@@ -942,9 +961,12 @@ public class DialogueGraphEditorWindow : EditorWindow
                 }
             }
         }
+
         _selectedNodeId = guid;
         _pending = default;
         Repaint();
+
+        return guid;
     }
 
     private bool TryGetFirstDanglingOutputPort(SerializedProperty nodeProp, out string portKey)
@@ -1465,6 +1487,52 @@ private void CompleteConnection(string targetNodeId)
         );
 
         Repaint();
+    }
+    private bool IsMouseOverAnyNode(Vector2 canvasMouse)
+    {
+        foreach (var kv in _nodeRects)
+        {
+            if (kv.Value.Contains(canvasMouse))
+                return true;
+        }
+        return false;
+    }
+    private void ShowCreateAndConnectMenu(Vector2 canvasMouse)
+    {
+        var pending = _pending;
+
+        var menu = new GenericMenu();
+
+        void Add(string label, Type nodeType)
+        {
+            menu.AddItem(new GUIContent($"Create/{label}"), false, () =>
+            {
+                // Create without auto-connect-from-selected
+                string newId = CreateNodeInternal(nodeType, canvasMouse, autoConnectFromSelected: false);
+
+                // Restore pending (CreateNodeInternal may clear it), then connect to the new node.
+                _pending = pending;
+                CompleteConnection(newId);
+
+                _pending = default;
+                Repaint();
+            });
+        }
+
+        Add("Line", typeof(LineNode));
+        Add("Choice", typeof(ChoiceNode));
+        Add("Branch", typeof(BranchNode));
+        Add("Command", typeof(CommandNode));
+        Add("End", typeof(EndNode));
+
+        menu.AddSeparator("");
+        menu.AddItem(new GUIContent("Cancel"), false, () =>
+        {
+            _pending = default;
+            Repaint();
+        });
+
+        menu.ShowAsContext();
     }
 }
 #endif
