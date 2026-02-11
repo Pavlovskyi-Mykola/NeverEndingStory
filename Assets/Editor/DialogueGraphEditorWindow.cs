@@ -25,6 +25,11 @@ public class DialogueGraphEditorWindow : EditorWindow
     private double _speakerOptionsNextRefreshTime = 0;
     private const double SpeakerRefreshInterval = 1.0; // seconds
 
+    [SerializeField] private bool showGrid = true;
+    [SerializeField] private float gridSmall = 20f;
+    [SerializeField] private float gridLarge = 100f;
+    [SerializeField] private float gridOpacitySmall = 0.12f;
+    [SerializeField] private float gridOpacityLarge = 0.22f;
 
     private Vector2 _canvasScroll;
     private Vector2 _inspectorScroll;
@@ -212,6 +217,9 @@ public class DialogueGraphEditorWindow : EditorWindow
         var innerRect = new Rect(0, 0, 5000, 5000);
         _canvasScroll = GUI.BeginScrollView(canvasRect, _canvasScroll, innerRect);
 
+        if (showGrid)
+            DrawGrid(innerRect, _canvasScroll, gridSmall, gridLarge, gridOpacitySmall, gridOpacityLarge);
+
         // Track mouse in canvas (content) coordinates.
         // NOTE: Inside BeginScrollView, IMGUI already reports Event.current.mousePosition
         // in the scrolled content space. Adding _canvasScroll again will double-apply
@@ -288,6 +296,41 @@ public class DialogueGraphEditorWindow : EditorWindow
         _suppressRightClickCancelOnce = false;
 
         GUI.EndScrollView();
+    }
+
+    private void DrawGrid(Rect innerRect, Vector2 scroll, float small, float large, float opacitySmall, float opacityLarge)
+    {
+        // Draw in canvas content coordinates (inside BeginScrollView)
+        Handles.BeginGUI();
+
+        var oldColor = Handles.color;
+
+        void DrawStep(float step, float opacity)
+        {
+            Handles.color = new Color(1f, 1f, 1f, opacity);
+
+            // Offset so grid appears stable while panning
+            float xOff = scroll.x % step;
+            float yOff = scroll.y % step;
+
+            // Vertical lines
+            for (float x = -xOff; x < innerRect.width; x += step)
+            {
+                Handles.DrawLine(new Vector3(x, 0f), new Vector3(x, innerRect.height));
+            }
+
+            // Horizontal lines
+            for (float y = -yOff; y < innerRect.height; y += step)
+            {
+                Handles.DrawLine(new Vector3(0f, y), new Vector3(innerRect.width, y));
+            }
+        }
+
+        DrawStep(small, opacitySmall);
+        DrawStep(large, opacityLarge);
+
+        Handles.color = oldColor;
+        Handles.EndGUI();
     }
 
     private void HandleCanvasRightClickContextMenu(Rect canvasRect)
