@@ -36,6 +36,13 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private string _selectedNodeId = null;
 
+    [SerializeField] private bool snapToGrid = false;
+    [SerializeField] private float snapSize = 10f;
+
+    private static float Snap(float v, float step) => step <= 0f ? v : Mathf.Round(v / step) * step;
+    private static Vector2 Snap(Vector2 p, float step) => new Vector2(Snap(p.x, step), Snap(p.y, step));
+
+
     private bool HasSelection => !string.IsNullOrEmpty(_selectedNodeId);
 
     private int GetSelectedIndex()
@@ -71,51 +78,6 @@ public class DialogueGraphEditorWindow : EditorWindow
         _nodeStyleCache.Clear();
     }
 
-    private GUIStyle GetNodeStyle(SerializedProperty nodeProp, string nodeId)
-    {
-        // Start node overrides type color
-        bool isStart = _startNodeIdProp != null && _startNodeIdProp.stringValue == nodeId;
-        bool isSelected = !string.IsNullOrEmpty(_selectedNodeId) && _selectedNodeId == nodeId;
-
-        var type = GetNodeType(nodeProp);
-
-        Color baseColor = isStart ? new Color(0.85f, 0.70f, 0.20f) : GetTypeColor(type);
-
-        // Slightly brighten selected nodes
-        if (isSelected)
-            baseColor = Color.Lerp(baseColor, Color.white, 0.12f);
-
-        string key = $"{type}_{isStart}_{isSelected}";
-        if (_nodeStyleCache.TryGetValue(key, out var cached) && cached != null)
-            return cached;
-
-        var style = new GUIStyle(GUI.skin.window);
-
-        // Solid background texture
-        var bg = MakeTex(baseColor);
-        style.normal.background = bg;
-        style.onNormal.background = bg;
-        style.hover.background = bg;
-        style.onHover.background = bg;
-        style.active.background = bg;
-        style.onActive.background = bg;
-        style.focused.background = bg;
-        style.onFocused.background = bg;
-
-        // Title text color (window title uses the style)
-        style.normal.textColor = Color.white;
-        style.onNormal.textColor = Color.white;
-        style.hover.textColor = Color.white;
-        style.onHover.textColor = Color.white;
-        style.active.textColor = Color.white;
-        style.onActive.textColor = Color.white;
-        style.focused.textColor = Color.white;
-        style.onFocused.textColor = Color.white;
-
-        _nodeStyleCache[key] = style;
-        return style;
-    }
-
     private static Color GetTypeColor(DialogueNodeType type)
     {
         // Requested palette:
@@ -137,17 +99,7 @@ public class DialogueGraphEditorWindow : EditorWindow
         };
     }
 
-    private Texture2D MakeTex(Color c)
-    {
-        var t = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-        t.hideFlags = HideFlags.HideAndDontSave;
-        t.SetPixel(0, 0, c);
-        t.Apply();
-        _generatedTextures.Add(t);
-        return t;
-    }
     // ---------------------------------------------------------------
-
     [MenuItem("Game/Dialogue/Dialogue Editor")]
     public static void Open()
     {
@@ -195,6 +147,7 @@ public class DialogueGraphEditorWindow : EditorWindow
                 SetGraph(newGraph);
 
             GUILayout.FlexibleSpace();
+            snapToGrid = GUILayout.Toggle(snapToGrid, "Snap", EditorStyles.toolbarButton);
 
             using (new EditorGUI.DisabledScope(_graph == null))
             {
@@ -364,7 +317,15 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             if (rect.position != pos)
             {
-                posProp.vector2Value = rect.position;
+                var newPos = rect.position;
+
+                if (snapToGrid)
+                    newPos = Snap(newPos, snapSize);
+
+                // If we snapped, also move the rect so the window visually “sticks” to the grid immediately.
+                rect.position = newPos;
+
+                posProp.vector2Value = newPos;
                 ApplyModified();
             }
 
