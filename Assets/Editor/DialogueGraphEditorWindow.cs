@@ -282,6 +282,15 @@ public class DialogueGraphEditorWindow : EditorWindow
         }
         EndWindows();
 
+        // Frame selected node with F
+        if (Event.current.type == EventType.KeyDown &&
+            Event.current.keyCode == KeyCode.F &&
+            !EditorGUIUtility.editingTextField)
+        {
+            FrameSelectedNode(canvasRect);
+            Event.current.Use();
+        }
+
         // Now that ports were laid out and cached, draw connections using the cached port centers.
         DrawAllConnections();
 
@@ -1448,6 +1457,26 @@ private void CompleteConnection(string targetNodeId)
         list.Add("<Custom…>");
         _speakerOptionsCache = list.ToArray();
         return _speakerOptionsCache;
+    }
+    private void FrameSelectedNode(Rect canvasRect)
+    {
+        if (string.IsNullOrEmpty(_selectedNodeId))
+            return;
+
+        if (!_nodeRects.TryGetValue(_selectedNodeId, out var rect))
+            return;
+
+        float visibleW = canvasRect.width;
+        float visibleH = canvasRect.height;
+
+        var center = rect.center;
+
+        _canvasScroll = new Vector2(
+            Mathf.Max(0f, center.x - visibleW * 0.5f),
+            Mathf.Max(0f, center.y - visibleH * 0.5f)
+        );
+
+        Repaint();
     }
 }
 #endif
