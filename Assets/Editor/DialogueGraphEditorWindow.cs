@@ -246,8 +246,9 @@ public class DialogueGraphEditorWindow : EditorWindow
         _nodeRects.Clear();
         _portCentersLocal.Clear();
 
+        // Cache node rects from serialized positions (used for initial hit-tests and as a
+        // fallback before the first window layout pass).
         CacheNodeRects();
-        DrawAllConnections();
 
         BeginWindows();
         for (int i = 0; i < _nodesProp.arraySize; i++)
@@ -272,6 +273,9 @@ public class DialogueGraphEditorWindow : EditorWindow
             _nodeRects[id] = rect;
         }
         EndWindows();
+
+        // Now that ports were laid out and cached, draw connections using the cached port centers.
+        DrawAllConnections();
 
         // Cancel pending connect by right click on canvas (but not when context menu is shown)
         if (!_suppressRightClickCancelOnce &&
@@ -731,26 +735,8 @@ public class DialogueGraphEditorWindow : EditorWindow
             var type = GetNodeType(nodeProp);
             string srcId = nodeProp.FindPropertyRelative("id").stringValue;
 
-            if (!_nodeRects.TryGetValue(srcId, out var srcRect))
-                continue;
-
             void Draw(string portKey, string dstId, string label)
-            {
-                if (string.IsNullOrEmpty(dstId)) return;
-                if (!_nodeRects.TryGetValue(dstId, out var dstRect)) return;
-
-                var a = GetOutputPortCenter(srcRect, type, portKey, nodeProp);
-                var b = GetInputPortCenter(dstRect);
-
-                DrawBezier(a, b, Color.white);
-
-                // Optional: label near midpoint
-                var mid = (a + b) * 0.5f;
-                var size = EditorStyles.miniLabel.CalcSize(new GUIContent(label));
-                var r = new Rect(mid.x - size.x * 0.5f, mid.y - size.y * 0.5f, size.x + 6, size.y + 2);
-                EditorGUI.DrawRect(r, new Color(0f, 0f, 0f, 0.35f));
-                GUI.Label(new Rect(r.x + 3, r.y + 1, r.width, r.height), label, EditorStyles.miniLabel);
-            }
+                => DrawConnectionIfValid(srcId, portKey, dstId, label);
 
             switch (type)
             {
@@ -786,24 +772,15 @@ public class DialogueGraphEditorWindow : EditorWindow
         // Pending preview
         if (_pending.IsActive)
         {
-            if (_nodeRects.TryGetValue(_pending.SourceNodeId, out var srcRect))
+            if (TryGetPortWorld(_pending.SourceNodeId, _pending.PortKey, out var a))
             {
-                int srcIndex = FindNodeIndexById(_pending.SourceNodeId);
-                if (srcIndex >= 0)
-                {
-                    var srcProp = _nodesProp.GetArrayElementAtIndex(srcIndex);
-                    var type = GetNodeType(srcProp);
-
-                    var a = GetOutputPortCenter(srcRect, type, _pending.PortKey, srcProp);
-                    var b = _lastCanvasMouse; // canvas coords
-                    DrawBezier(a, b, Color.yellow);
-                }
+                var b = _lastCanvasMouse; // canvas coords
+                DrawBezier(a, b, Color.yellow);
             }
         }
 
         Handles.EndGUI();
     }
-
 
     private void DrawConnectionIfValid(string srcId, string portKey, string dstId, string label)
     {
