@@ -55,6 +55,99 @@ public class DialogueGraphEditorWindow : EditorWindow
     private bool _suppressRightClickCancelOnce;
     private Vector2 _lastCanvasMouse; // in canvas coords (scroll included)
 
+    // -------------------- Node coloring / styles --------------------
+    private readonly Dictionary<string, GUIStyle> _nodeStyleCache = new();
+    private readonly List<Texture2D> _generatedTextures = new();
+
+    private void OnDisable()
+    {
+        // Cleanup generated textures to avoid leaking editor resources
+        for (int i = 0; i < _generatedTextures.Count; i++)
+        {
+            if (_generatedTextures[i] != null)
+                DestroyImmediate(_generatedTextures[i]);
+        }
+        _generatedTextures.Clear();
+        _nodeStyleCache.Clear();
+    }
+
+    private GUIStyle GetNodeStyle(SerializedProperty nodeProp, string nodeId)
+    {
+        // Start node overrides type color
+        bool isStart = _startNodeIdProp != null && _startNodeIdProp.stringValue == nodeId;
+        bool isSelected = !string.IsNullOrEmpty(_selectedNodeId) && _selectedNodeId == nodeId;
+
+        var type = GetNodeType(nodeProp);
+
+        Color baseColor = isStart ? new Color(0.85f, 0.70f, 0.20f) : GetTypeColor(type);
+
+        // Slightly brighten selected nodes
+        if (isSelected)
+            baseColor = Color.Lerp(baseColor, Color.white, 0.12f);
+
+        string key = $"{type}_{isStart}_{isSelected}";
+        if (_nodeStyleCache.TryGetValue(key, out var cached) && cached != null)
+            return cached;
+
+        var style = new GUIStyle(GUI.skin.window);
+
+        // Solid background texture
+        var bg = MakeTex(baseColor);
+        style.normal.background = bg;
+        style.onNormal.background = bg;
+        style.hover.background = bg;
+        style.onHover.background = bg;
+        style.active.background = bg;
+        style.onActive.background = bg;
+        style.focused.background = bg;
+        style.onFocused.background = bg;
+
+        // Title text color (window title uses the style)
+        style.normal.textColor = Color.white;
+        style.onNormal.textColor = Color.white;
+        style.hover.textColor = Color.white;
+        style.onHover.textColor = Color.white;
+        style.active.textColor = Color.white;
+        style.onActive.textColor = Color.white;
+        style.focused.textColor = Color.white;
+        style.onFocused.textColor = Color.white;
+
+        _nodeStyleCache[key] = style;
+        return style;
+    }
+
+    private static Color GetTypeColor(DialogueNodeType type)
+    {
+        // Requested palette:
+        // Line   : dark blue
+        // Choice : dark green
+        // Branch : purple
+        // Start  : gold (handled separately)
+        return type switch
+        {
+            DialogueNodeType.Line => new Color(0.12f, 0.18f, 0.38f),
+            DialogueNodeType.Choice => new Color(0.10f, 0.30f, 0.16f),
+            DialogueNodeType.Branch => new Color(0.34f, 0.16f, 0.42f),
+
+            // optional extras (safe defaults)
+            DialogueNodeType.Command => new Color(0.35f, 0.26f, 0.12f),
+            DialogueNodeType.End => new Color(0.30f, 0.10f, 0.10f),
+
+            _ => new Color(0.18f, 0.18f, 0.18f),
+        };
+    }
+
+    private Texture2D MakeTex(Color c)
+    {
+        var t = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        t.hideFlags = HideFlags.HideAndDontSave;
+        t.SetPixel(0, 0, c);
+        t.Apply();
+        _generatedTextures.Add(t);
+        return t;
+    }
+    // ---------------------------------------------------------------
+
     [MenuItem("Game/Dialogue/Dialogue Editor")]
     public static void Open()
     {
@@ -381,38 +474,48 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private void DrawNodeWindow(int index, SerializedProperty nodeProp)
     {
-        var e = Event.current;
-
-        // Select on click
-        if (e.type == EventType.MouseDown && e.button == 0)
-        {
-            _selectedNodeId = nodeProp.FindPropertyRelative("id").stringValue;
-            GUI.FocusControl(null);
-            Event.current.Use();   // prevents canvas click from immediately deselecting
-            Repaint();
-        }
-
-        // Top row: input port (right), start button (left)
         string nodeId = nodeProp.FindPropertyRelative("id").stringValue;
         bool isStart = _startNodeIdProp != null && _startNodeIdProp.stringValue == nodeId;
 
+        Color headerColor = isStart
+            ? new Color(0.85f, 0.70f, 0.20f) // Gold
+            : GetTypeColor(GetNodeType(nodeProp));
+
+        // Draw header bar
+        Rect headerRect = new Rect(0, 0, NodeWidth, NodeHeaderHeight);
+        EditorGUI.DrawRect(headerRect, headerColor);
+
+        // Optional subtle bottom line for separation
+        EditorGUI.DrawRect(
+            new Rect(0, NodeHeaderHeight - 1, NodeWidth, 1),
+            new Color(0, 0, 0, 0.25f)
+        );
+
+        // Push layout below header
+        GUILayout.Space(NodeHeaderHeight - 2);
+
+        var e = Event.current;
+
+        // Select on click (don't consume event - keeps dragging/controls working)
+        if (e.type == EventType.MouseDown && e.button == 0)
+        {
+            _selectedNodeId = nodeId;
+            GUI.FocusControl(null);
+            Repaint();
+        }
+
         using (new GUILayout.HorizontalScope())
         {
-            // Input port (top-left)
             DrawInputPort(nodeProp);
-
             GUILayout.FlexibleSpace();
 
-            // Start node button (top-right)
             if (GUILayout.Button(new GUIContent("★", "Set as Start Node"),
                 GUILayout.Width(22), GUILayout.Height(18)))
             {
-                _startNodeIdProp.stringValue =
-                    nodeProp.FindPropertyRelative("id").stringValue;
+                _startNodeIdProp.stringValue = nodeId;
                 ApplyModified();
             }
         }
-
 
         // Visual indicator for the Start node
         if (isStart)
