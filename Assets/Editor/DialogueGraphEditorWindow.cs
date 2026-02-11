@@ -658,9 +658,6 @@ public class DialogueGraphEditorWindow : EditorWindow
         var tProp = nodeProp.FindPropertyRelative("trueNextNodeId");
         var fProp = nodeProp.FindPropertyRelative("falseNextNodeId");
 
-        GUILayout.Label("Branch", EditorStyles.miniBoldLabel);
-        GUILayout.Label("(condition in inspector)", EditorStyles.miniLabel);
-
         GUILayout.Space(6);
 
         DrawOutputRow(nodeProp, "True", "True", tProp.stringValue, () =>
@@ -679,8 +676,8 @@ public class DialogueGraphEditorWindow : EditorWindow
         var cmdsProp = nodeProp.FindPropertyRelative("commands");
         var nextProp = nodeProp.FindPropertyRelative("nextNodeId");
 
-        GUILayout.Label($"Commands: {cmdsProp.arraySize}", EditorStyles.miniBoldLabel);
-        GUILayout.Label("(edit commands in inspector)", EditorStyles.miniLabel);
+        //GUILayout.Label($"Commands: {cmdsProp.arraySize}", EditorStyles.miniBoldLabel);
+        //GUILayout.Label("(edit commands in inspector)", EditorStyles.miniLabel);
 
         GUILayout.Space(6);
 
@@ -1413,22 +1410,55 @@ private void CompleteConnection(string targetNodeId)
         return id.Length <= 6 ? id : id.Substring(0, 6);
     }
 
-    private static float GetNodeHeight(SerializedProperty nodeProp)
+    private float GetNodeHeight(SerializedProperty nodeProp)
     {
         var type = GetNodeType(nodeProp);
+
+        // Base padding + header
+        float h = 28f; // title bar-ish space
+
         switch (type)
         {
-            case DialogueNodeType.Line: return 190f;
-            case DialogueNodeType.Command: return 120f;
-            case DialogueNodeType.Branch: return 145f;
             case DialogueNodeType.Choice:
                 {
                     var choicesProp = nodeProp.FindPropertyRelative("choices");
-                    int lines = Mathf.Clamp(choicesProp.arraySize, 1, 6);
-                    return 125f + lines * 26f;
+                    int count = choicesProp != null ? choicesProp.arraySize : 0;
+
+                    int maxShow = Mathf.Min(count, 6);
+                    float row = 28f;
+                    float smallGap = 4f;
+
+                    h += row + smallGap;               // "Choices: X" label
+
+                    for (int i = 0; i < maxShow; i++)
+                    {
+                        h += row + 2f;                 // choice row
+
+                        // If dangling link -> extra "Create End →" row
+                        var ch = choicesProp.GetArrayElementAtIndex(i);
+                        var nextProp = ch.FindPropertyRelative("nextNodeId");
+                        if (nextProp != null && string.IsNullOrEmpty(nextProp.stringValue))
+                            h += row + 2f;
+                    }
+
+                    if (count > maxShow)
+                        h += row;                      // "... edit full list" label
+
+                    h += smallGap;
+                    h += row + 6f;                     // bottom buttons row
+
+                    return Mathf.Max(140f, h);         // ensure minimum
                 }
-            case DialogueNodeType.End: return 70f;
-            default: return 140f;
+            case DialogueNodeType.Line:
+                return 180f; // your existing values are fine
+            case DialogueNodeType.Branch:
+                return 150f;
+            case DialogueNodeType.Command:
+                return 150f;
+            case DialogueNodeType.End:
+                return 90f;
+            default:
+                return 140f;
         }
     }
 
