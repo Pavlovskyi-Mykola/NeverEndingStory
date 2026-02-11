@@ -312,7 +312,8 @@ public class DialogueGraphEditorWindow : EditorWindow
             string id = idProp.stringValue;
             Vector2 pos = posProp.vector2Value;
 
-            var rect = new Rect(pos.x, pos.y, NodeWidth, GetNodeHeight(nodeProp));
+            float width = GetNodeWidth(nodeProp);
+            var rect = new Rect(pos.x, pos.y, width, GetNodeHeight(nodeProp));
             rect = GUI.Window(i, rect, _ => DrawNodeWindow(i, nodeProp), GetNodeTitle(nodeProp));
 
             if (rect.position != pos)
@@ -1420,6 +1421,18 @@ private void CompleteConnection(string targetNodeId)
                 return 140f;
         }
     }
+
+    private float GetNodeWidth(SerializedProperty nodeProp)
+    {
+        switch (GetNodeType(nodeProp))
+        {
+            case DialogueNodeType.End:
+                return 90f; // narrow
+            default:
+                return NodeWidth;
+        }
+    }
+
 
     private struct PendingConnection
     {
