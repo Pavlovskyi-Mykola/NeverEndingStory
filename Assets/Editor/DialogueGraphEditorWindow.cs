@@ -762,7 +762,6 @@ public class DialogueGraphEditorWindow : EditorWindow
     }
 
     // ---------------- Inspector ----------------
-
     private void DrawSelectedNodeInspector(int index)
     {
         var nodeProp = _nodesProp.GetArrayElementAtIndex(index);
@@ -824,7 +823,6 @@ public class DialogueGraphEditorWindow : EditorWindow
     }
 
     // ---------------- Connections drawing ----------------
-
     private void CacheNodeRects()
     {
         for (int i = 0; i < _nodesProp.arraySize; i++)
@@ -904,15 +902,6 @@ public class DialogueGraphEditorWindow : EditorWindow
         if (!TryGetPortWorld(dstId, "IN", out var b)) return;
 
         DrawBezier(a, b, Color.white);
-
-        // Label near midpoint
-        var mid = (a + b) * 0.5f;
-        var size = EditorStyles.miniLabel.CalcSize(new GUIContent(label));
-        var r = new Rect(mid.x - size.x * 0.5f, mid.y - size.y * 0.5f, size.x + 6, size.y + 2);
-
-        // background
-        EditorGUI.DrawRect(r, new Color(0f, 0f, 0f, 0.35f));
-        GUI.Label(new Rect(r.x + 3, r.y + 1, r.width, r.height), label, EditorStyles.miniLabel);
     }
 
 
@@ -938,11 +927,6 @@ public class DialogueGraphEditorWindow : EditorWindow
     private void CreateNode(Type nodeType)
     {
         CreateNodeInternal(nodeType, _lastCanvasMouse, autoConnectFromSelected: true);
-    }
-
-    private void CreateNodeAtCursor(Type nodeType)
-    {
-        CreateNodeInternal(nodeType, _lastCanvasMouse, autoConnectFromSelected: false);
     }
 
     private void CreateNodeInternal(Type nodeType, Vector2 canvasPos, bool autoConnectFromSelected)
@@ -997,7 +981,6 @@ public class DialogueGraphEditorWindow : EditorWindow
                 }
             }
         }
-
         _selectedNodeId = guid;
         _pending = default;
         Repaint();
@@ -1051,7 +1034,6 @@ public class DialogueGraphEditorWindow : EditorWindow
                     return true;
                 }
         }
-
         return false;
     }
 
@@ -1127,7 +1109,6 @@ private void CompleteConnection(string targetNodeId)
                 }
             }
         }
-
         ApplyModified();
         _pending = default;
         Repaint();
@@ -1180,8 +1161,6 @@ private void CompleteConnection(string targetNodeId)
     {
         choicesProp.InsertArrayElementAtIndex(index + 1);
         var duplicated = choicesProp.GetArrayElementAtIndex(index + 1);
-        // Unity duplicates previous element values automatically; nothing else needed.
-        // You can optionally tweak text like " (copy)" but keeping it identical is often useful.
     }
 
     private void AutoEndDanglingChoiceLinks(SerializedProperty choiceNodeProp)
@@ -1247,12 +1226,10 @@ private void CompleteConnection(string targetNodeId)
                     }
             }
         }
-
         ApplyModified();
     }
 
     // ---------------- Validation ----------------
-
     private void ValidateGraph()
     {
         EnsureSerialized();
@@ -1327,7 +1304,6 @@ private void CompleteConnection(string targetNodeId)
     }
 
     // ---------------- Helpers ----------------
-
     private void SetGraph(DialogueGraph graph)
     {
         _graph = graph;
@@ -1475,52 +1451,7 @@ private void CompleteConnection(string targetNodeId)
             PortKey = portKey;
         }
     }
-    private Vector2 GetInputPortCenter(Rect nodeRect)
-    {
-        // Left-side input port
-        float x = nodeRect.xMin + 10f;
-        float y = nodeRect.y + 18f;
-        return new Vector2(x, y);
-    }
 
-    private Vector2 GetOutputPortCenter(Rect nodeRect, DialogueNodeType type, string portKey, SerializedProperty nodeProp)
-    {
-        // Right-side outputs. These Y offsets match our current node UI roughly.
-        // If you later change node layout, tweak these constants.
-        float x = nodeRect.xMax - 10f;
-
-        switch (type)
-        {
-            case DialogueNodeType.Line:
-                // "Next" row near bottom of line node
-                return new Vector2(x, nodeRect.y + 168f);
-
-            case DialogueNodeType.Command:
-                // "Next" row near bottom of command node
-                return new Vector2(x, nodeRect.y + 92f);
-
-            case DialogueNodeType.Branch:
-                if (portKey == "True") return new Vector2(x, nodeRect.y + 92f);
-                if (portKey == "False") return new Vector2(x, nodeRect.y + 118f);
-                return new Vector2(x, nodeRect.y + 92f);
-
-            case DialogueNodeType.Choice:
-                {
-                    // PortKey format: "Choice:i"
-                    int idx = 0;
-                    if (portKey.StartsWith("Choice:", StringComparison.Ordinal))
-                        int.TryParse(portKey.Substring("Choice:".Length), out idx);
-
-                    // First choice row starts here; each row step matches inline choice row height.
-                    float startY = nodeRect.y + 68f;
-                    float stepY = 26f;
-                    return new Vector2(x, startY + idx * stepY);
-                }
-
-            default:
-                return new Vector2(x, nodeRect.y + 90f);
-        }
-    }
     private string[] GetSpeakerOptions()
     {
         // Refresh at most once per second
@@ -1553,6 +1484,7 @@ private void CompleteConnection(string targetNodeId)
         _speakerOptionsCache = list.ToArray();
         return _speakerOptionsCache;
     }
+
     private void FrameSelectedNode(Rect canvasRect)
     {
         if (string.IsNullOrEmpty(_selectedNodeId))
