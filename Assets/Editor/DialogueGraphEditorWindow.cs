@@ -342,8 +342,6 @@ public class DialogueGraphEditorWindow : EditorWindow
             }
         }
 
-        HandleCanvasRightClickContextMenu(canvasRect);
-
         _nodeRects.Clear();
         _portCentersLocal.Clear();
 
@@ -433,43 +431,6 @@ public class DialogueGraphEditorWindow : EditorWindow
 
         Handles.color = oldColor;
         Handles.EndGUI();
-    }
-
-    private void HandleCanvasRightClickContextMenu(Rect canvasRect)
-    {
-        // If right-click occurs on empty canvas area (not inside any node rect),
-        // show context menu with "Add Node" at cursor.
-        if (Event.current.type == EventType.MouseDown && Event.current.button == 1)
-        {
-            // Determine if click is on any node
-            bool onNode = false;
-            foreach (var kv in _nodeRects)
-            {
-                if (kv.Value.Contains(_lastCanvasMouse))
-                {
-                    onNode = true;
-                    break;
-                }
-            }
-
-            if (!onNode)
-            {
-                _suppressRightClickCancelOnce = true;
-
-                var menu = new GenericMenu();
-                menu.AddItem(new GUIContent("Add/Line"), false, () => CreateNodeAtCursor(typeof(LineNode)));
-                menu.AddItem(new GUIContent("Add/Choice"), false, () => CreateNodeAtCursor(typeof(ChoiceNode)));
-                menu.AddItem(new GUIContent("Add/Branch"), false, () => CreateNodeAtCursor(typeof(BranchNode)));
-                menu.AddItem(new GUIContent("Add/Command"), false, () => CreateNodeAtCursor(typeof(CommandNode)));
-                menu.AddItem(new GUIContent("Add/End"), false, () => CreateNodeAtCursor(typeof(EndNode)));
-
-                menu.AddSeparator("");
-                menu.AddItem(new GUIContent("Cancel Connection"), false, () => _pending = default);
-
-                menu.ShowAsContext();
-                Event.current.Use();
-            }
-        }
     }
 
     private void DrawNodeWindow(int index, SerializedProperty nodeProp)
@@ -1410,6 +1371,7 @@ private void CompleteConnection(string targetNodeId)
     {
         if (_graphSO == null) return;
         _graphSO.ApplyModifiedProperties();
+        _graphSO.Update(); // keep properties in sync immediately
         EditorUtility.SetDirty(_graph);
     }
 
