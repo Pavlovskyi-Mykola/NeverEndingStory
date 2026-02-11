@@ -31,6 +31,9 @@ public class DialogueGraphEditorWindow : EditorWindow
     [SerializeField] private float gridOpacitySmall = 0.12f;
     [SerializeField] private float gridOpacityLarge = 0.22f;
 
+    private string _mouseDownNodeId;
+    private bool _mouseDownOnHeader;
+
     private Vector2 _canvasScroll;
     private Vector2 _inspectorScroll;
 
@@ -414,7 +417,6 @@ public class DialogueGraphEditorWindow : EditorWindow
             ? new Color(0.85f, 0.70f, 0.20f) // Gold
             : GetTypeColor(GetNodeType(nodeProp));
 
-        // Draw header bar
         Rect headerRect = new Rect(0, 0, NodeWidth, NodeHeaderHeight);
         EditorGUI.DrawRect(headerRect, headerColor);
 
@@ -423,20 +425,11 @@ public class DialogueGraphEditorWindow : EditorWindow
             new Rect(0, NodeHeaderHeight - 1, NodeWidth, 1),
             new Color(0, 0, 0, 0.25f)
         );
+        HandleNodeSelection(nodeId, headerRect);
 
-        // Push layout below header
         GUILayout.Space(10);
 
-        var e = Event.current;
-
-        // Select on click (don't consume event - keeps dragging/controls working)
-        if (e.type == EventType.MouseDown && e.button == 0)
-        {
-            _selectedNodeId = nodeId;
-            GUI.FocusControl(null);
-            Repaint();
-        }
-
+        // ---- your controls ----
         using (new GUILayout.HorizontalScope())
         {
             DrawInputPort(nodeProp);
@@ -452,45 +445,68 @@ public class DialogueGraphEditorWindow : EditorWindow
 
         GUILayout.Space(5);
 
-        // Visual indicator for the Start node
-        if (isStart)
+        switch (GetNodeType(nodeProp))
         {
-            var r = GUILayoutUtility.GetRect(NodeWidth - 10f, 18f);
-            EditorGUI.DrawRect(r, new Color(1f, 0.85f, 0.2f, 0.30f));
-            GUI.Label(r, "START", EditorStyles.miniBoldLabel);
+            case DialogueNodeType.Line: DrawLineNodeInline(nodeProp); break;
+            case DialogueNodeType.Choice: DrawChoiceNodeInline(nodeProp); break;
+            case DialogueNodeType.Branch: DrawBranchNodeInline(nodeProp); break;
+            case DialogueNodeType.Command: DrawCommandNodeInline(nodeProp); break;
+            case DialogueNodeType.End: GUILayout.Label("(End)", EditorStyles.miniLabel); break;
         }
 
-        GUILayout.Space(5);
+        // Optional: make sure there IS clickable empty space at the bottom
+        GUILayout.FlexibleSpace();
 
-        var nodeType = GetNodeType(nodeProp);
+        GUI.DragWindow(headerRect);
+    }
 
-        switch (nodeType)
+    private void HandleNodeSelection(string nodeId, Rect headerRect)
+    {
+        var e = Event.current;
+
+        // Track where the click started
+        if (e.type == EventType.MouseDown && e.button == 0)
         {
-            case DialogueNodeType.Line:
-                DrawLineNodeInline(nodeProp);
-                break;
+            _mouseDownNodeId = nodeId;
+            _mouseDownOnHeader = headerRect.Contains(e.mousePosition);
 
-            case DialogueNodeType.Choice:
-                DrawChoiceNodeInline(nodeProp);
-                break;
+            // Header click: select immediately (and clear focus)
+            if (_mouseDownOnHeader)
+            {
+                SelectNode(nodeId, clearFocus: true);
+            }
 
-            case DialogueNodeType.Branch:
-                DrawBranchNodeInline(nodeProp);
-                break;
-
-            case DialogueNodeType.Command:
-                DrawCommandNodeInline(nodeProp);
-                break;
-
-            case DialogueNodeType.End:
-                GUILayout.Label("(End)", EditorStyles.miniLabel);
-                break;
+            return;
         }
 
-        GUI.DragWindow(new Rect(0, 0, NodeWidth, NodeHeaderHeight));
+        // Decide "empty-space select" on MouseUp (after controls had a chance to grab the mouse)
+        if (e.type == EventType.MouseUp && e.button == 0)
+        {
+            if (_mouseDownNodeId != nodeId)
+                return;
+
+            // If user clicked a control (TextArea/Popup/Button), Unity usually sets hotControl.
+            // So only treat it as "empty space" when no control is active.
+            if (!_mouseDownOnHeader && GUIUtility.hotControl == 0)
+            {
+                SelectNode(nodeId, clearFocus: true);
+            }
+
+            _mouseDownNodeId = null;
+            _mouseDownOnHeader = false;
+        }
+    }
+
+    private void SelectNode(string nodeId, bool clearFocus)
+    {
+        _selectedNodeId = nodeId;
+        if (clearFocus) GUI.FocusControl(null);
+        Repaint();
     }
 
     // ---------------- Inline node views + ports ----------------
+
+    private const string CustomSpeakerOption = "<Custom…>";
 
     private void DrawLineNodeInline(SerializedProperty nodeProp)
     {
@@ -498,24 +514,45 @@ public class DialogueGraphEditorWindow : EditorWindow
         var textProp = nodeProp.FindPropertyRelative("text");
         var nextProp = nodeProp.FindPropertyRelative("nextNodeId");
 
-        // Inline edit speaker
         var options = GetSpeakerOptions();
         int idx = Array.IndexOf(options, speakerProp.stringValue);
         if (idx < 0) idx = 0;
 
-        idx = EditorGUILayout.Popup("Speaker", idx, options);
-
-        if (options[idx] == "<Custom…>")
+        // 1) Popup
+        EditorGUI.BeginChangeCheck();
+        int newIdx = EditorGUILayout.Popup("Speaker", idx, options);
+        if (EditorGUI.EndChangeCheck())
         {
-            speakerProp.stringValue = EditorGUILayout.TextField("Custom", speakerProp.stringValue);
+            if (options[newIdx] != CustomSpeakerOption)
+            {
+                speakerProp.stringValue = options[newIdx];
+                ApplyModified();
+            }
+            else
+            {
+                // Switching to custom: keep current text (or clear it if you prefer)
+                // speakerProp.stringValue = "";
+                ApplyModified();
+            }
         }
-        else
-        {
-            speakerProp.stringValue = options[idx];
-        }
-        ApplyModified();
 
-        // Inline edit first lines of text
+        // 2) Custom field (draw every frame if custom is selected)
+        bool isCustom =
+            (newIdx >= 0 && newIdx < options.Length && options[newIdx] == CustomSpeakerOption) ||
+            (idx >= 0 && idx < options.Length && options[idx] == CustomSpeakerOption);
+
+        if (isCustom)
+        {
+            EditorGUI.BeginChangeCheck();
+            string custom = EditorGUILayout.TextField("Custom", speakerProp.stringValue);
+            if (EditorGUI.EndChangeCheck())
+            {
+                speakerProp.stringValue = custom;
+                ApplyModified();
+            }
+        }
+
+        // Text
         EditorGUI.BeginChangeCheck();
         string txt = EditorGUILayout.TextArea(textProp.stringValue ?? "", GUILayout.Height(50));
         if (EditorGUI.EndChangeCheck())
@@ -528,7 +565,6 @@ public class DialogueGraphEditorWindow : EditorWindow
 
         DrawOutputRow(nodeProp, "Next", "Next", nextProp.stringValue, () =>
         {
-            // Create End Node on dangling output
             CreateEndAndConnect(nodeProp, "Next");
         });
     }
