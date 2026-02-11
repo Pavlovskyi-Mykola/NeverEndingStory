@@ -492,7 +492,7 @@ public class DialogueGraphEditorWindow : EditorWindow
         );
 
         // Push layout below header
-        GUILayout.Space(NodeHeaderHeight - 2);
+        GUILayout.Space(10);
 
         var e = Event.current;
 
@@ -517,17 +517,17 @@ public class DialogueGraphEditorWindow : EditorWindow
             }
         }
 
+        GUILayout.Space(5);
+
         // Visual indicator for the Start node
         if (isStart)
         {
             var r = GUILayoutUtility.GetRect(NodeWidth - 10f, 18f);
-            r.x += 5f;
-            r.width = NodeWidth - 10f;
             EditorGUI.DrawRect(r, new Color(1f, 0.85f, 0.2f, 0.30f));
             GUI.Label(r, "START", EditorStyles.miniBoldLabel);
         }
 
-        GUILayout.Space(2);
+        GUILayout.Space(5);
 
         var nodeType = GetNodeType(nodeProp);
 
