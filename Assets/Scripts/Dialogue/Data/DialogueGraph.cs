@@ -5,11 +5,17 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "DialogueGraph", menuName = "Game/Dialogue/Dialogue Graph")]
 public class DialogueGraph : ScriptableObject
 {
-    [SerializeField] private string startNodeId;
+    [SerializeField, HideInInspector]
+    private string dialogueId; // Stable GUID-like ID (never changes)
+
+    [SerializeField]
+    private string startNodeId;
 
     // SerializeReference lets Unity store derived node types in a single list.
-    [SerializeReference] private List<DialogueNode> nodes = new();
+    [SerializeReference]
+    private List<DialogueNode> nodes = new();
 
+    public string DialogueId => dialogueId;
     public string StartNodeId => startNodeId;
     public IReadOnlyList<DialogueNode> Nodes => nodes;
 
@@ -22,6 +28,17 @@ public class DialogueGraph : ScriptableObject
         return null;
     }
 
-    // Helpful for debugging.
     public bool HasNode(string id) => GetNode(id) != null;
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        // Generate GUID once if missing
+        if (string.IsNullOrEmpty(dialogueId))
+        {
+            dialogueId = Guid.NewGuid().ToString("N");
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
+    }
+#endif
 }

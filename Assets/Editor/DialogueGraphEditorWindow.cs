@@ -4,9 +4,6 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-// Put this file under an "Editor" folder.
-// Requires your existing DialogueGraph, DialogueNode + derived nodes.
-
 public class DialogueGraphEditorWindow : EditorWindow
 {
     private const float LeftPanelWidth = 300f;
