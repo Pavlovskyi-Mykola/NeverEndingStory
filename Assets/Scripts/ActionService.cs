@@ -16,6 +16,13 @@ public class ActionService : MonoBehaviour
 
     public bool CanExecute(ActionDefinition action, out ActionFailReason reason)
     {
+        // Global gameplay gate
+        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+        {
+            reason = ActionFailReason.BlockedByDialogue;
+            return false;
+        }
+
         reason = ActionFailReason.None;
 
         var stats = PlayerStatsManager.Instance;
@@ -45,6 +52,12 @@ public class ActionService : MonoBehaviour
 
     public bool Execute(ActionDefinition action, out ActionFailReason reason)
     {
+        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
+        {
+            reason = ActionFailReason.BlockedByDialogue;
+            return false;
+        }
+
         if (!CanExecute(action, out reason))
             return false;
 
@@ -66,7 +79,7 @@ public class ActionService : MonoBehaviour
         if (action.TimeSkip == TimeSkipMode.NextPhase &&
             TimeManager.Instance != null)
         {
-            TimeManager.Instance.AdvancePhase();
+            TimeManager.Instance.AdvancePhase(TimeChangeSource.Action);
         }
         // Later: advance time phase, consume energy, etc.
 

@@ -8,6 +8,8 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    public bool IsInDialogue { get; private set; }
+
     [Header("Database")]
     [SerializeField] private SceneDatabase sceneDatabase;
 
@@ -53,12 +55,16 @@ public class GameManager : MonoBehaviour
     {
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.OnDialogueStateChanged += HandleDialogueState;
     }
 
     private void OnDisable()
     {
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.OnDialogueStateChanged -= HandleDialogueState;
     }
 
     private async void Start()
@@ -276,5 +282,14 @@ public class GameManager : MonoBehaviour
                 _isForcingRelocation = false;
             }
         }
+    }
+
+    private void HandleDialogueState(bool inDialogue)
+    {
+        IsInDialogue = inDialogue;
+
+        // Force UI to refresh availability immediately
+        if (ActionService.Instance != null)
+            ActionService.Instance.NotifyStateChanged();
     }
 }

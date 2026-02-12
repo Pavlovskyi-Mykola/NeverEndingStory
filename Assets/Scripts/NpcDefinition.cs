@@ -60,6 +60,9 @@ public struct NpcScheduleEntry
     [SpawnPointKey]
     public string SpawnPointKey;           // e.g. "Door", "Table01"
 
+    [Header("Dialogue")]
+    public DialogueGraph Dialogue; // conversation to use at this time/location
+
     [Header("Optional")]
     public bool Absent; // if true, NPC is forced absent even if LocationScene is set
 

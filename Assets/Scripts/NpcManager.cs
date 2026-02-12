@@ -5,6 +5,10 @@ public class NpcManager : MonoBehaviour
 {
     public static NpcManager Instance { get; private set; }
 
+    public const string PlayerSpeakerId = "Player";
+
+    public IReadOnlyList<NpcDefinition> Npcs => npcs;
+
     [Header("NPC Database")]
     [SerializeField] private List<NpcDefinition> npcs = new List<NpcDefinition>();
 
@@ -111,7 +115,14 @@ public class NpcManager : MonoBehaviour
                 continue;
             }
 
-            _activeSpawner.EnsureSpawned(def.NpcId, def.Prefab, entry.SpawnPointKey);
+            var instance = _activeSpawner.EnsureSpawned(def.NpcId, def.Prefab, entry.SpawnPointKey);
+
+            if (instance != null)
+            {
+                var interactable = instance.GetComponent<NpcInteractable>();
+                if (interactable != null)
+                    interactable.Init(def, entry, _currentLocation);
+            }
         }
     }
 
@@ -127,5 +138,24 @@ public class NpcManager : MonoBehaviour
         // ✅ Most SceneReference wrappers expose a SceneName or similar.
         // If yours uses a different property, change this one line.
         return a.SceneName == b.SceneName;
+    }
+
+    public List<string> GetAllSpeakerIds()
+    {
+        var result = new List<string> { PlayerSpeakerId };
+
+        for (int i = 0; i < npcs.Count; i++)
+        {
+            var def = npcs[i];
+            if (def == null) continue;
+
+            var id = def.NpcId;
+            if (string.IsNullOrWhiteSpace(id)) continue;
+
+            if (!result.Contains(id))
+                result.Add(id);
+        }
+
+        return result;
     }
 }
