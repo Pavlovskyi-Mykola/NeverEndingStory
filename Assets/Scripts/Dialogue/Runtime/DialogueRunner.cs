@@ -101,7 +101,7 @@ public class DialogueRunner : MonoBehaviour
         EmitNextTurnFrom(_current.Id);
     }
 
-    public void StopDialogue()
+    private void StopDialogue()
     {
         // ---- Journal finish ----
         if (_graph != null && _hasStartedJournal && !string.IsNullOrEmpty(_activeDialogueId))
@@ -129,8 +129,7 @@ public class DialogueRunner : MonoBehaviour
 
     public void CloseDialogue()
     {
-        ExecutePendingCloseTraversalIfAny();
-        StopDialogue();
+        FinalizeAndStop();
     }
 
     public void Continue()
@@ -140,8 +139,7 @@ public class DialogueRunner : MonoBehaviour
 
         if (_waitingForClose)
         {
-            ExecutePendingCloseTraversalIfAny();
-            StopDialogue();
+            FinalizeAndStop();
             return;
         }
 
@@ -335,7 +333,7 @@ public class DialogueRunner : MonoBehaviour
         if (!IsRunning)
         {
             // If already stopped, don't emit anything
-            StopDialogue();
+            //StopDialogue();
             return;
         }
 
@@ -562,6 +560,15 @@ public class DialogueRunner : MonoBehaviour
 
         IsAdvancing = false;
     }
+    private void FinalizeAndStop()
+    {
+        // Always execute any trailing command/branch chain that was deferred by "peek -> Close"
+        ExecutePendingCloseTraversalIfAny();
+
+        // Then do the real shutdown + journal finish + UI hide
+        StopDialogue();
+    }
+
 }
 
 public struct PresentedChoice
