@@ -30,6 +30,9 @@ public class DialogueRunner : MonoBehaviour
 {
     public static DialogueRunner Instance { get; private set; }
 
+    // If we show Close because peek saw End, we may still need to execute trailing Command/Branch nodes.
+    private string _pendingCloseTraversalStartId;
+
     public event Action<DialogueTurn> OnTurn;
     public event Action OnHideDialogue;
     public event Action<bool> OnDialogueStateChanged;
@@ -111,15 +114,12 @@ public class DialogueRunner : MonoBehaviour
 
         _graph = null;
         _current = null;
-
+        _pendingCloseTraversalStartId = null;
         _waitingForPlayerReply = false;
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
-
         _waitingForClose = false;
-
         IsAdvancing = false;
-
         _activeDialogueId = null;
         _hasStartedJournal = false;
 
@@ -129,6 +129,7 @@ public class DialogueRunner : MonoBehaviour
 
     public void CloseDialogue()
     {
+        ExecutePendingCloseTraversalIfAny();
         StopDialogue();
     }
 
@@ -139,6 +140,7 @@ public class DialogueRunner : MonoBehaviour
 
         if (_waitingForClose)
         {
+            ExecutePendingCloseTraversalIfAny();
             StopDialogue();
             return;
         }
@@ -235,6 +237,7 @@ public class DialogueRunner : MonoBehaviour
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
         _waitingForClose = false;
+        _pendingCloseTraversalStartId = null;
 
         var first = TraverseExecuting(startNodeId, out var endReason);
         if (endReason == EndReason.End || first == null)
@@ -287,6 +290,7 @@ public class DialogueRunner : MonoBehaviour
                 {
                     turn.Action = DialogueTurnAction.Close;
                     _waitingForClose = true;
+                    _pendingCloseTraversalStartId = ln.NextNodeId;
                 }
                 else
                 {
@@ -338,7 +342,7 @@ public class DialogueRunner : MonoBehaviour
         _waitingForPlayerReply = false;
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
-
+        _pendingCloseTraversalStartId = null;
         _waitingForClose = true;
         IsAdvancing = false;
 
@@ -541,6 +545,22 @@ public class DialogueRunner : MonoBehaviour
     {
         // Stable as long as option ordering is stable (upgrade later to ChoiceOptionId if needed).
         return $"{dialogueId}:choice:{choiceNodeId}:{optionIndex}";
+    }
+    private void ExecutePendingCloseTraversalIfAny()
+    {
+        if (!IsRunning) return;
+        if (IsAdvancing) return;
+
+        if (string.IsNullOrEmpty(_pendingCloseTraversalStartId))
+            return;
+
+        IsAdvancing = true;
+
+        TraverseExecuting(_pendingCloseTraversalStartId, out _);
+
+        _pendingCloseTraversalStartId = null;
+
+        IsAdvancing = false;
     }
 }
 
