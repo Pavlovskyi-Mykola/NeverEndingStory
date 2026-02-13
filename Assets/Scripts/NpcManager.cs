@@ -119,9 +119,15 @@ public class NpcManager : MonoBehaviour
 
             if (instance != null)
             {
-                var interactable = instance.GetComponent<NpcInteractable>();
-                if (interactable != null)
-                    interactable.Init(def, entry, _currentLocation);
+                var launcher = instance.GetComponent<NpcDialogueLauncher>();
+                if (launcher != null)
+                {
+                    // locationId: use SceneReference guid/name/key, whatever your selector expects
+                    string locationId = _currentLocation != null ? _currentLocation.SceneName : null;
+                    var routeSet = def.Routes;
+
+                    launcher.Init(def.NpcId, locationId, routeSet);
+                }
             }
         }
     }

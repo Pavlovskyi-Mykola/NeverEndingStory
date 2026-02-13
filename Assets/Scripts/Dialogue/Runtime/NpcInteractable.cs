@@ -2,35 +2,25 @@ using UnityEngine;
 
 public class NpcInteractable : MonoBehaviour
 {
-    private NpcDefinition _def;
-    private DialogueGraph _dialogue; // chosen from schedule entry
-    private SceneReference _currentLocation;
+    private NpcDialogueLauncher _launcher;
 
-    public void Init(NpcDefinition def, NpcScheduleEntry entry, SceneReference currentLocation)
+    private void Awake()
     {
-        _def = def;
-        _dialogue = entry.Dialogue;           // schedule-specific dialogue
-        _currentLocation = currentLocation;   // optional (debug/logging)
+        _launcher = GetComponent<NpcDialogueLauncher>();
     }
 
-    // Option A: Talk directly (UI button calls this)
     public void Talk()
     {
         if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
             return;
 
-        if (_dialogue == null)
+        if (_launcher == null)
         {
-            Debug.LogWarning($"NPC '{_def?.NpcId}' has no dialogue for current schedule/location.");
+            Debug.LogError("[NpcInteractable] Missing NpcDialogueLauncher component on NPC prefab.");
             return;
         }
 
-        if (DialogueRunner.Instance == null)
-        {
-            Debug.LogError("DialogueRunner.Instance is null (Bootstrap missing).");
-            return;
-        }
-
-        DialogueRunner.Instance.StartDialogue(_dialogue);
+        _launcher.TryStartDialogue();
     }
 }
+

@@ -12,6 +12,8 @@ public class NpcDefinition : ScriptableObject
     [Header("Prefab")]
     public GameObject Prefab;         // visual instance for scenes
 
+    public DialogueRouteSet Routes;
+
     [Header("Schedule")]
     public List<NpcScheduleEntry> Schedule = new List<NpcScheduleEntry>();
 
