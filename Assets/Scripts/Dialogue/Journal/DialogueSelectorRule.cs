@@ -29,6 +29,11 @@ public class DialogueSelectorRule
     public bool requireNotSeenDialogue;      // extra guard
     public DialogueGraph requireNotSeenThis; // if set -> require not seen
 
+    public DayOfWeekMask allowedDays = DayOfWeekMask.All;
+
+    // Location constraint (optional)
+    public string[] allowedLocationIds; // if empty/null => allowed everywhere
+
     // Later extensions (placeholders):
     // public string requiredQuestFlag;
     // public int requiredStrength;
@@ -40,14 +45,31 @@ public class DialogueSelectorRule
         if (!allowedPhases.HasFlag(DayPhaseMaskExtensions.From(ctx.Phase)))
             return false;
 
+        // Day constraint
+        if (!allowedDays.HasFlag(DayOfWeekMaskExtensions.From(ctx.Day)))
+            return false;
+
+        // Location constraint
+        if (allowedLocationIds != null && allowedLocationIds.Length > 0)
+        {
+            bool ok = false;
+            for (int i = 0; i < allowedLocationIds.Length; i++)
+            {
+                if (string.Equals(allowedLocationIds[i], ctx.LocationId, StringComparison.OrdinalIgnoreCase))
+                {
+                    ok = true;
+                    break;
+                }
+            }
+            if (!ok) return false;
+        }
+
         // Not-seen constraints
         if (requireNotSeenDialogue && graph != null && journal != null && journal.HasSeenDialogue(graph.DialogueId))
             return false;
 
         if (requireNotSeenThis != null && journal != null && journal.HasSeenDialogue(requireNotSeenThis.DialogueId))
             return false;
-
-        // If you add quests/stats later, check them here.
 
         return true;
     }
