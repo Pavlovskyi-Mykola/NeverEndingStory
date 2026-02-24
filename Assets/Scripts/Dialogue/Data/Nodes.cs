@@ -85,6 +85,7 @@ public class CommandNode : DialogueNode
     public override DialogueNodeType NodeType => DialogueNodeType.Command;
 
     public IReadOnlyList<DialogueCommand> Commands => commands;
+
     public string NextNodeId => nextNodeId;
 
     public CommandNode(string id) : base(id) { }

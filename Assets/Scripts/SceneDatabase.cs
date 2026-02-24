@@ -2,9 +2,39 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 [CreateAssetMenu(fileName = "SceneDatabase", menuName = "Game/Scene Database")]
 public class SceneDatabase : ScriptableObject
 {
+    private static SceneDatabase _instance;
+
+    /// <summary>
+    /// Global access to the single SceneDatabase asset.
+    /// In Editor, lazily finds and loads it if not yet loaded.
+    /// In runtime builds, this assumes the asset is referenced somewhere so Unity loads it.
+    /// </summary>
+    public static SceneDatabase Instance
+    {
+        get
+        {
+#if UNITY_EDITOR
+            if (_instance == null)
+            {
+                var guids = AssetDatabase.FindAssets("t:SceneDatabase");
+                if (guids != null && guids.Length > 0)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                    _instance = AssetDatabase.LoadAssetAtPath<SceneDatabase>(path);
+                }
+            }
+#endif
+            return _instance;
+        }
+    }
+
     [Header("Core / Startup")]
     public SceneReference Bootstrap;
     public SceneReference UI;
@@ -18,9 +48,21 @@ public class SceneDatabase : ScriptableObject
 
     private Dictionary<string, LocationEntry> _bySceneName;
 
-    private void OnEnable() => RebuildCache();
+    private void OnEnable()
+    {
+        // Ensure Instance is set as soon as Unity loads this asset (Editor + Runtime).
+        _instance = this;
+        RebuildCache();
+    }
+
 #if UNITY_EDITOR
-    private void OnValidate() => RebuildCache();
+    private void OnValidate()
+    {
+        // Keep cache fresh while editing.
+        // Also keep Instance stable if asset gets reloaded.
+        _instance = this;
+        RebuildCache();
+    }
 #endif
 
     private void RebuildCache()

@@ -30,6 +30,9 @@ public class DialogueRunner : MonoBehaviour
 {
     public static DialogueRunner Instance { get; private set; }
 
+    // If we show Close because peek saw End, we may still need to execute trailing Command/Branch nodes.
+    private string _pendingCloseTraversalStartId;
+
     public event Action<DialogueTurn> OnTurn;
     public event Action OnHideDialogue;
     public event Action<bool> OnDialogueStateChanged;
@@ -49,6 +52,10 @@ public class DialogueRunner : MonoBehaviour
 
     // Close step state
     private bool _waitingForClose;
+
+    // Journal run state
+    private string _activeDialogueId;
+    private bool _hasStartedJournal;
 
     // You can later replace this with NpcManager.PlayerSpeakerId if you want
     private const string PlayerSpeakerId = "Player";
@@ -74,24 +81,47 @@ public class DialogueRunner : MonoBehaviour
             return;
         }
 
+        // ---- Journal start ----
+        _activeDialogueId = _graph.DialogueId;
+        _hasStartedJournal = false;
+
+        var journal = DialogueJournal.Instance;
+        if (journal != null && !string.IsNullOrEmpty(_activeDialogueId))
+        {
+            journal.OnDialogueStarted(_activeDialogueId);
+            _hasStartedJournal = true;
+
+            // Optional: mark starting node as visited immediately
+            journal.GetOrCreateProgress(_activeDialogueId)?.MarkNodeVisited(_current.Id);
+        }
+
         OnDialogueStateChanged?.Invoke(true);
 
         IsAdvancing = true;
         EmitNextTurnFrom(_current.Id);
     }
 
-    public void StopDialogue()
+    private void StopDialogue()
     {
+        // ---- Journal finish ----
+        if (_graph != null && _hasStartedJournal && !string.IsNullOrEmpty(_activeDialogueId))
+        {
+            DialogueJournal.Instance?.OnDialogueFinished(
+                _activeDialogueId,
+                _current != null ? _current.Id : null
+            );
+        }
+
         _graph = null;
         _current = null;
-
+        _pendingCloseTraversalStartId = null;
         _waitingForPlayerReply = false;
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
-
         _waitingForClose = false;
-
         IsAdvancing = false;
+        _activeDialogueId = null;
+        _hasStartedJournal = false;
 
         OnDialogueStateChanged?.Invoke(false);
         OnHideDialogue?.Invoke();
@@ -99,7 +129,7 @@ public class DialogueRunner : MonoBehaviour
 
     public void CloseDialogue()
     {
-        StopDialogue();
+        FinalizeAndStop();
     }
 
     public void Continue()
@@ -109,7 +139,7 @@ public class DialogueRunner : MonoBehaviour
 
         if (_waitingForClose)
         {
-            StopDialogue();
+            FinalizeAndStop();
             return;
         }
 
@@ -146,6 +176,10 @@ public class DialogueRunner : MonoBehaviour
 
         var ln = (LineNode)node;
 
+        // Journal: player confirmed this reply (now it's "seen/done")
+        if (!string.IsNullOrEmpty(_activeDialogueId))
+            DialogueJournal.Instance?.MarkLineSeen(BuildLineId(_activeDialogueId, ln.Id));
+
         // Execute on-enter commands at the moment player confirms the reply
         for (int i = 0; i < ln.OnEnterCommands.Count; i++)
             ln.OnEnterCommands[i].Execute();
@@ -167,6 +201,10 @@ public class DialogueRunner : MonoBehaviour
         if (presentedChoiceIndex < 0 || presentedChoiceIndex >= presented.Count) return;
 
         var chosen = presented[presentedChoiceIndex];
+
+        // Journal: choice was selected
+        if (!string.IsNullOrEmpty(_activeDialogueId))
+            DialogueJournal.Instance?.MarkChoiceSeen(BuildChoiceId(_activeDialogueId, choiceNode.Id, chosen.SourceIndex));
 
         IsAdvancing = true;
 
@@ -197,6 +235,7 @@ public class DialogueRunner : MonoBehaviour
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
         _waitingForClose = false;
+        _pendingCloseTraversalStartId = null;
 
         var first = TraverseExecuting(startNodeId, out var endReason);
         if (endReason == EndReason.End || first == null)
@@ -206,6 +245,10 @@ public class DialogueRunner : MonoBehaviour
         }
 
         _current = first;
+
+        // Journal: node visited
+        if (!string.IsNullOrEmpty(_activeDialogueId))
+            DialogueJournal.Instance?.GetOrCreateProgress(_activeDialogueId)?.MarkNodeVisited(first.Id);
 
         var turn = new DialogueTurn();
 
@@ -224,6 +267,10 @@ public class DialogueRunner : MonoBehaviour
                 turn.NpcSpeaker = ln.Speaker;
                 turn.NpcText = ln.Text;
 
+                // Journal: NPC line was shown to player
+                if (!string.IsNullOrEmpty(_activeDialogueId))
+                    DialogueJournal.Instance?.MarkLineSeen(BuildLineId(_activeDialogueId, ln.Id));
+
                 // Decide next required action (peek only; does not execute)
                 var next = PeekNextInput(ln.NextNodeId);
 
@@ -241,6 +288,7 @@ public class DialogueRunner : MonoBehaviour
                 {
                     turn.Action = DialogueTurnAction.Close;
                     _waitingForClose = true;
+                    _pendingCloseTraversalStartId = ln.NextNodeId;
                 }
                 else
                 {
@@ -251,6 +299,7 @@ public class DialogueRunner : MonoBehaviour
             else
             {
                 // Player line encountered directly: show reply button, execute on submit
+                // (Do NOT mark line seen here; mark on SubmitPlayerReply)
                 turn.HasNpcLine = false;
                 turn.Action = DialogueTurnAction.PlayerReply;
                 turn.PlayerSpeaker = ln.Speaker;
@@ -284,14 +333,14 @@ public class DialogueRunner : MonoBehaviour
         if (!IsRunning)
         {
             // If already stopped, don't emit anything
-            StopDialogue();
+            //StopDialogue();
             return;
         }
 
         _waitingForPlayerReply = false;
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
-
+        _pendingCloseTraversalStartId = null;
         _waitingForClose = true;
         IsAdvancing = false;
 
@@ -464,7 +513,12 @@ public class DialogueRunner : MonoBehaviour
             bool ok = c.Conditions == null || c.Conditions.Evaluate();
             if (!ok) continue;
 
-            result.Add(new PresentedChoice { Text = c.Text, Source = c });
+            result.Add(new PresentedChoice
+            {
+                Text = c.Text,
+                Source = c,
+                SourceIndex = i
+            });
         }
         return result;
     }
@@ -474,10 +528,54 @@ public class DialogueRunner : MonoBehaviour
         if (string.IsNullOrWhiteSpace(speaker)) return false;
         return string.Equals(speaker.Trim(), PlayerSpeakerId, StringComparison.OrdinalIgnoreCase);
     }
+
+    // -----------------------------
+    // Journal ID helpers
+    // -----------------------------
+
+    private static string BuildLineId(string dialogueId, string nodeId)
+    {
+        // Stable as long as nodeId is stable.
+        return $"{dialogueId}:line:{nodeId}";
+    }
+
+    private static string BuildChoiceId(string dialogueId, string choiceNodeId, int optionIndex)
+    {
+        // Stable as long as option ordering is stable (upgrade later to ChoiceOptionId if needed).
+        return $"{dialogueId}:choice:{choiceNodeId}:{optionIndex}";
+    }
+    private void ExecutePendingCloseTraversalIfAny()
+    {
+        if (!IsRunning) return;
+        if (IsAdvancing) return;
+
+        if (string.IsNullOrEmpty(_pendingCloseTraversalStartId))
+            return;
+
+        IsAdvancing = true;
+
+        TraverseExecuting(_pendingCloseTraversalStartId, out _);
+
+        _pendingCloseTraversalStartId = null;
+
+        IsAdvancing = false;
+    }
+    private void FinalizeAndStop()
+    {
+        // Always execute any trailing command/branch chain that was deferred by "peek -> Close"
+        ExecutePendingCloseTraversalIfAny();
+
+        // Then do the real shutdown + journal finish + UI hide
+        StopDialogue();
+    }
+
 }
 
 public struct PresentedChoice
 {
     public string Text;
     public DialogueChoice Source;
+
+    // Index of Source in the ChoiceNode's Choices list (for stable-ish choiceId composition)
+    public int SourceIndex;
 }

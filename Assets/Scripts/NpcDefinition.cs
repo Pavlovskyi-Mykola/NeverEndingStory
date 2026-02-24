@@ -12,6 +12,8 @@ public class NpcDefinition : ScriptableObject
     [Header("Prefab")]
     public GameObject Prefab;         // visual instance for scenes
 
+    public DialogueRouteSet Routes;
+
     [Header("Schedule")]
     public List<NpcScheduleEntry> Schedule = new List<NpcScheduleEntry>();
 
@@ -59,9 +61,6 @@ public struct NpcScheduleEntry
     public SceneReference LocationScene;   // scene = location (your current model)
     [SpawnPointKey]
     public string SpawnPointKey;           // e.g. "Door", "Table01"
-
-    [Header("Dialogue")]
-    public DialogueGraph Dialogue; // conversation to use at this time/location
 
     [Header("Optional")]
     public bool Absent; // if true, NPC is forced absent even if LocationScene is set
