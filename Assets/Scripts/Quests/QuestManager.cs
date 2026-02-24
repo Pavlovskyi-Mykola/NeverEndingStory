@@ -19,6 +19,113 @@ public sealed class QuestManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    private void OnEnable()
+    {
+        Hook();
+        // Also listen for late-created singletons
+        TimeManager.InstanceReady += HandleTimeManagerReady;
+        GameManager.InstanceReady += HandleGameManagerReady;
+    }
+
+    private void OnDisable()
+    {
+        Unhook();
+        TimeManager.InstanceReady -= HandleTimeManagerReady;
+        GameManager.InstanceReady -= HandleGameManagerReady;
+    }
+
+    private void HandleTimeManagerReady(TimeManager tm)
+    {
+        UnhookTime();
+        HookTime();
+    }
+
+    private void HandleGameManagerReady(GameManager gm)
+    {
+        UnhookGame();
+        HookGame();
+    }
+
+    private void Hook()
+    {
+        HookTime();
+        HookGame();
+        HookStats();
+    }
+
+    private void Unhook()
+    {
+        UnhookTime();
+        UnhookGame();
+        UnhookStats();
+    }
+
+    private void HookTime()
+    {
+        if (TimeManager.Instance != null)
+            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
+    }
+
+    private void UnhookTime()
+    {
+        if (TimeManager.Instance != null)
+            TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+    }
+
+    private void HookGame()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.LocationReady += HandleLocationReady;
+    }
+
+    private void UnhookGame()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.LocationReady -= HandleLocationReady;
+    }
+
+    private void HookStats()
+    {
+        if (PlayerStatsManager.Instance != null)
+            PlayerStatsManager.Instance.OnStatsChanged += HandleStatsChanged;
+    }
+
+    private void UnhookStats()
+    {
+        if (PlayerStatsManager.Instance != null)
+            PlayerStatsManager.Instance.OnStatsChanged -= HandleStatsChanged;
+    }
+
+    private void HandleTimeChanged(DayOfWeek day, TimeOfDay phase)
+    {
+        // Any time gate might open/close
+        TryAdvanceAllActive();
+    }
+
+    private void HandleLocationReady(SceneReference location)
+    {
+        // Location-dependent steps might complete
+        TryAdvanceAllActive();
+    }
+
+    private void HandleStatsChanged()
+    {
+        // MinStats / money conditions might complete
+        TryAdvanceAllActive();
+    }
+
+    private void TryAdvanceAllActive()
+    {
+        if (Journal == null) return;
+
+        bool changed = false;
+        foreach (var questId in Journal.Active)
+            changed |= TryAdvanceQuest(questId);
+
+        if (changed)
+            OnQuestStateChanged?.Invoke();
+    }
+
     // -----------------------
     // Public API
     // -----------------------
@@ -35,18 +142,16 @@ public sealed class QuestManager : MonoBehaviour
             return false;
         }
 
-        // If already completed, don't restart (you can change this rule later)
         if (Journal.IsCompleted(questId))
             return false;
 
         Journal.MarkStarted(questId);
 
-        // Ensure progress exists and is within bounds
         var prog = Journal.GetOrCreateProgress(questId);
         prog.CurrentStepIndex = Mathf.Clamp(prog.CurrentStepIndex, 0, def.Steps.Count - 1);
         prog.ManualStepCompleted = false;
 
-        // Try to advance immediately (AutoComplete chains)
+        // Auto-advance any immediately-completable steps
         TryAdvanceQuest(questId);
 
         OnQuestStateChanged?.Invoke();
@@ -55,13 +160,8 @@ public sealed class QuestManager : MonoBehaviour
 
     public bool IsActive(string questId) => Journal != null && Journal.IsActive(questId);
     public bool IsCompleted(string questId) => Journal != null && Journal.IsCompleted(questId);
-
     public QuestProgress GetProgress(string questId) => Journal != null ? Journal.GetOrCreateProgress(questId) : null;
 
-    /// <summary>
-    /// For StepType.Manual: call this when some external logic decides the step is done.
-    /// (Later: Dialogue/Inventory/Time hooks will call TryAdvanceQuest automatically.)
-    /// </summary>
     public bool CompleteManualStep(string questId)
     {
         if (!TryGetDefAndProg(questId, out var def, out var prog)) return false;
@@ -80,10 +180,6 @@ public sealed class QuestManager : MonoBehaviour
         return advanced;
     }
 
-    /// <summary>
-    /// Evaluate + advance as far as possible (useful when conditions change).
-    /// Returns true if anything advanced/completed.
-    /// </summary>
     public bool TryAdvanceQuest(string questId)
     {
         if (!TryGetDefAndProg(questId, out var def, out var prog)) return false;
@@ -91,28 +187,33 @@ public sealed class QuestManager : MonoBehaviour
 
         bool changed = false;
 
-        // Advance through any completed steps (including chained AutoComplete)
         while (true)
         {
             var step = GetCurrentStep(def, prog);
             if (step == null)
             {
-                // No steps => complete
                 Journal.MarkCompleted(questId);
                 changed = true;
                 break;
             }
 
+            // Global time/phase constraints apply to any step
+            if (!MeetsTimeConstraints(step))
+                break;
+
             if (!IsStepComplete(step, prog))
                 break;
 
-            // Step complete -> next
+            // Apply completion side effects (PayMoney, etc.)
+            if (!ApplyStepCompletionEffects(step))
+                break;
+
+            // Consume step -> next
             prog.CurrentStepIndex++;
             prog.ManualStepCompleted = false;
             prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
             changed = true;
 
-            // Quest complete?
             if (prog.CurrentStepIndex >= def.Steps.Count)
             {
                 Journal.MarkCompleted(questId);
@@ -146,7 +247,6 @@ public sealed class QuestManager : MonoBehaviour
         prog = Journal.GetOrCreateProgress(questId);
         if (prog == null) return false;
 
-        // Keep safe bounds
         prog.CurrentStepIndex = Mathf.Clamp(prog.CurrentStepIndex, 0, Mathf.Max(0, def.Steps.Count - 1));
         return true;
     }
@@ -158,7 +258,29 @@ public sealed class QuestManager : MonoBehaviour
         return def.Steps[prog.CurrentStepIndex];
     }
 
-    private static bool IsStepComplete(QuestStepDefinition step, QuestProgress prog)
+    private bool MeetsTimeConstraints(QuestStepDefinition step)
+    {
+        if (step == null) return true;
+
+        var tm = TimeManager.Instance;
+        if (tm == null) return true; // if time system absent, don't block
+
+        // Day window
+        if (step.MinDay >= 0 && (int)tm.DayOfWeek < step.MinDay) return false;
+        if (step.MaxDay >= 0 && (int)tm.DayOfWeek > step.MaxDay) return false;
+
+        // Phase required
+        if (!string.IsNullOrEmpty(step.RequiredPhaseId))
+        {
+            // Expecting "Morning"/"Afternoon"/"Evening"/"Night"
+            if (!string.Equals(step.RequiredPhaseId, tm.TimeOfDay.ToString(), StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool IsStepComplete(QuestStepDefinition step, QuestProgress prog)
     {
         if (step == null || prog == null) return false;
 
@@ -170,9 +292,108 @@ public sealed class QuestManager : MonoBehaviour
             case QuestStepType.Manual:
                 return prog.ManualStepCompleted;
 
-            // For now: future step types return false until we add integrations
+            case QuestStepType.ReachLocation:
+                return IsAtTargetLocation(step);
+
+            case QuestStepType.MinStats:
+                return MeetsMinStats(step);
+
+            case QuestStepType.HaveMoney:
+                return HasMoney(step);
+
+            case QuestStepType.PayMoney:
+                // "Complete" means "can pay now" (payment happens in ApplyStepCompletionEffects)
+                return CanPay(step);
+
             default:
                 return false;
         }
+    }
+
+    private bool ApplyStepCompletionEffects(QuestStepDefinition step)
+    {
+        if (step == null) return true;
+
+        switch (step.Type)
+        {
+            case QuestStepType.PayMoney:
+                return TryPay(step);
+
+            default:
+                return true;
+        }
+    }
+
+    private bool IsAtTargetLocation(QuestStepDefinition step)
+    {
+        if (GameManager.Instance == null) return false;
+        if (string.IsNullOrEmpty(step.TargetLocationSceneName)) return false;
+
+        var cur = GameManager.Instance.CurrentLocation;
+        return string.Equals(cur, step.TargetLocationSceneName, StringComparison.Ordinal);
+    }
+
+    private bool MeetsMinStats(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        if (step.MinStats == null || step.MinStats.Count == 0)
+            return true; // no requirements = pass
+
+        foreach (var req in step.MinStats)
+        {
+            if (req == null || string.IsNullOrEmpty(req.StatId)) continue;
+
+            int value = GetStatValue(stats, req.StatId);
+            if (value < req.MinValue)
+                return false;
+        }
+
+        return true;
+    }
+
+    private int GetStatValue(PlayerStatsManager stats, string statId)
+    {
+        // Keep it simple for now — matches your current PlayerStatsManager fields.
+        if (string.Equals(statId, "money", StringComparison.OrdinalIgnoreCase)) return stats.Money;
+        if (string.Equals(statId, "strength", StringComparison.OrdinalIgnoreCase)) return stats.Strength;
+        if (string.Equals(statId, "intellect", StringComparison.OrdinalIgnoreCase)) return stats.Intellect;
+
+        // Unknown stat => fail safely
+        return int.MinValue;
+    }
+
+    private bool HasMoney(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        int required = step.MinMoney > 0 ? step.MinMoney : step.Amount;
+        if (required <= 0) return true;
+
+        return stats.Money >= required;
+    }
+
+    private bool CanPay(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        int cost = step.Amount > 0 ? step.Amount : step.MinMoney;
+        if (cost <= 0) return true;
+
+        return stats.CanAfford(cost);
+    }
+
+    private bool TryPay(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        int cost = step.Amount > 0 ? step.Amount : step.MinMoney;
+        if (cost <= 0) return true;
+
+        return stats.TrySpendMoney(cost);
     }
 }
