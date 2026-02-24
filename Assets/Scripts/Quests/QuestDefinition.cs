@@ -26,31 +26,26 @@ public sealed class QuestDefinition : ScriptableObject
 [Serializable]
 public class QuestStepDefinition
 {
-    public string StepId; // optional, but helpful for debugging / future non-linear
+    [Header("Meta")]
+    public string StepId; // optional but helpful for debugging
     [TextArea(1, 4)] public string Text;
 
     public QuestStepType Type = QuestStepType.Manual;
 
-    // ---- Generic payload fields (used later) ----
-    [Header("Targets (optional; used by some step types later)")]
-    public string TargetNpcId;
-    public string TargetLocationSceneName;
-    public string ItemId;
-    public int Amount;
+    [Header("Location (ReachLocation)")]
+    public SceneReference TargetLocation;
 
-    [Header("Requirements (optional; used later)")]
-    public int MinMoney;
-    public List<StatRequirement> MinStats = new();
+    [Header("Time restrictions (optional; gates ANY step)")]
+    public bool RestrictByDay = false;
+    public DayOfWeek[] AllowedDays;
 
-    [Header("Time gating (optional; used later)")]
-    public int MinDay = -1;
-    public int MaxDay = -1;
-    public string RequiredPhaseId; // keep string; later map to your phase enum/id
-}
+    public bool RestrictByPhase = false;
+    public TimeOfDay[] AllowedPhases;
 
-[Serializable]
-public class StatRequirement
-{
-    public string StatId;
-    public int MinValue;
+    [Header("Stats requirements (MinStats)")]
+    public int RequiredStrength = 0;
+    public int RequiredIntellect = 0;
+
+    [Header("Money (HaveMoney / PayMoney)")]
+    public int RequiredMoney = 0;
 }

@@ -257,7 +257,6 @@ public sealed class QuestManager : MonoBehaviour
         if (prog.CurrentStepIndex < 0 || prog.CurrentStepIndex >= def.Steps.Count) return null;
         return def.Steps[prog.CurrentStepIndex];
     }
-
     private bool MeetsTimeConstraints(QuestStepDefinition step)
     {
         if (step == null) return true;
@@ -265,20 +264,90 @@ public sealed class QuestManager : MonoBehaviour
         var tm = TimeManager.Instance;
         if (tm == null) return true; // if time system absent, don't block
 
-        // Day window
-        if (step.MinDay >= 0 && (int)tm.DayOfWeek < step.MinDay) return false;
-        if (step.MaxDay >= 0 && (int)tm.DayOfWeek > step.MaxDay) return false;
-
-        // Phase required
-        if (!string.IsNullOrEmpty(step.RequiredPhaseId))
+        if (step.RestrictByDay)
         {
-            // Expecting "Morning"/"Afternoon"/"Evening"/"Night"
-            if (!string.Equals(step.RequiredPhaseId, tm.TimeOfDay.ToString(), StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (step.AllowedDays == null || step.AllowedDays.Length == 0) return false;
+
+            bool ok = false;
+            var day = tm.DayOfWeek;
+            for (int i = 0; i < step.AllowedDays.Length; i++)
+                if (step.AllowedDays[i] == day) { ok = true; break; }
+
+            if (!ok) return false;
+        }
+
+        if (step.RestrictByPhase)
+        {
+            if (step.AllowedPhases == null || step.AllowedPhases.Length == 0) return false;
+
+            bool ok = false;
+            var phase = tm.TimeOfDay;
+            for (int i = 0; i < step.AllowedPhases.Length; i++)
+                if (step.AllowedPhases[i] == phase) { ok = true; break; }
+
+            if (!ok) return false;
         }
 
         return true;
     }
+
+    private bool IsAtTargetLocation(QuestStepDefinition step)
+    {
+        if (GameManager.Instance == null) return false;
+        if (step.TargetLocation == null || !step.TargetLocation.IsValid) return false;
+
+        // Most robust: compare SceneReference if possible
+        if (GameManager.Instance.CurrentLocationRef != null)
+            return GameManager.Instance.CurrentLocationRef == step.TargetLocation;
+
+        // Fallback: compare names
+        return string.Equals(GameManager.Instance.CurrentLocation, step.TargetLocation.SceneName, StringComparison.Ordinal);
+    }
+
+    private bool MeetsMinStats(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        if (step.RequiredStrength > 0 && stats.Strength < step.RequiredStrength) return false;
+        if (step.RequiredIntellect > 0 && stats.Intellect < step.RequiredIntellect) return false;
+
+        return true;
+    }
+
+    private bool HasMoney(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        int required = Mathf.Max(0, step.RequiredMoney);
+        if (required == 0) return true;
+
+        return stats.Money >= required;
+    }
+
+    private bool CanPay(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        int cost = Mathf.Max(0, step.RequiredMoney);
+        if (cost == 0) return true;
+
+        return stats.CanAfford(cost);
+    }
+
+    private bool TryPay(QuestStepDefinition step)
+    {
+        var stats = PlayerStatsManager.Instance;
+        if (stats == null) return false;
+
+        int cost = Mathf.Max(0, step.RequiredMoney);
+        if (cost == 0) return true;
+
+        return stats.TrySpendMoney(cost);
+    }
+
 
     private bool IsStepComplete(QuestStepDefinition step, QuestProgress prog)
     {
@@ -322,78 +391,5 @@ public sealed class QuestManager : MonoBehaviour
             default:
                 return true;
         }
-    }
-
-    private bool IsAtTargetLocation(QuestStepDefinition step)
-    {
-        if (GameManager.Instance == null) return false;
-        if (string.IsNullOrEmpty(step.TargetLocationSceneName)) return false;
-
-        var cur = GameManager.Instance.CurrentLocation;
-        return string.Equals(cur, step.TargetLocationSceneName, StringComparison.Ordinal);
-    }
-
-    private bool MeetsMinStats(QuestStepDefinition step)
-    {
-        var stats = PlayerStatsManager.Instance;
-        if (stats == null) return false;
-
-        if (step.MinStats == null || step.MinStats.Count == 0)
-            return true; // no requirements = pass
-
-        foreach (var req in step.MinStats)
-        {
-            if (req == null || string.IsNullOrEmpty(req.StatId)) continue;
-
-            int value = GetStatValue(stats, req.StatId);
-            if (value < req.MinValue)
-                return false;
-        }
-
-        return true;
-    }
-
-    private int GetStatValue(PlayerStatsManager stats, string statId)
-    {
-        // Keep it simple for now — matches your current PlayerStatsManager fields.
-        if (string.Equals(statId, "money", StringComparison.OrdinalIgnoreCase)) return stats.Money;
-        if (string.Equals(statId, "strength", StringComparison.OrdinalIgnoreCase)) return stats.Strength;
-        if (string.Equals(statId, "intellect", StringComparison.OrdinalIgnoreCase)) return stats.Intellect;
-
-        // Unknown stat => fail safely
-        return int.MinValue;
-    }
-
-    private bool HasMoney(QuestStepDefinition step)
-    {
-        var stats = PlayerStatsManager.Instance;
-        if (stats == null) return false;
-
-        int required = step.MinMoney > 0 ? step.MinMoney : step.Amount;
-        if (required <= 0) return true;
-
-        return stats.Money >= required;
-    }
-
-    private bool CanPay(QuestStepDefinition step)
-    {
-        var stats = PlayerStatsManager.Instance;
-        if (stats == null) return false;
-
-        int cost = step.Amount > 0 ? step.Amount : step.MinMoney;
-        if (cost <= 0) return true;
-
-        return stats.CanAfford(cost);
-    }
-
-    private bool TryPay(QuestStepDefinition step)
-    {
-        var stats = PlayerStatsManager.Instance;
-        if (stats == null) return false;
-
-        int cost = step.Amount > 0 ? step.Amount : step.MinMoney;
-        if (cost <= 0) return true;
-
-        return stats.TrySpendMoney(cost);
     }
 }
