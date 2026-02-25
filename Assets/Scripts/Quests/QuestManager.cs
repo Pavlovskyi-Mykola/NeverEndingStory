@@ -293,16 +293,11 @@ public sealed class QuestManager : MonoBehaviour
     private bool IsAtTargetLocation(QuestStepDefinition step)
     {
         if (GameManager.Instance == null) return false;
-        if (step.TargetLocation == null || !step.TargetLocation.IsValid) return false;
+        if (string.IsNullOrEmpty(step.TargetLocationSceneName)) return false;
 
-        // If you store SceneReference as current location
-        if (GameManager.Instance.CurrentLocationRef != null)
-            return GameManager.Instance.CurrentLocationRef == step.TargetLocation;
-
-        // Fallback if using string
         return string.Equals(
             GameManager.Instance.CurrentLocation,
-            step.TargetLocation.SceneName,
+            step.TargetLocationSceneName,
             StringComparison.Ordinal
         );
     }

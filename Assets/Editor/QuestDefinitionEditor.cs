@@ -1,4 +1,6 @@
 ﻿#if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
@@ -110,7 +112,8 @@ public class QuestDefinitionEditor : Editor
         switch (type)
         {
             case QuestStepType.ReachLocation:
-                h += PropHeight(stepEl.FindPropertyRelative("TargetLocation"), includeChildren: true);
+                // one popup line + spacing
+                h += EditorGUIUtility.singleLineHeight;
                 h += Spacing();
                 break;
 
@@ -162,6 +165,7 @@ public class QuestDefinitionEditor : Editor
         rect.x += innerPadding;
         rect.width -= innerPadding * 2;
         float y = rect.y;
+        EditorGUI.BeginChangeCheck();
 
         // StepId + Auto ID button row
         var stepId = stepEl.FindPropertyRelative("StepId");
@@ -188,7 +192,7 @@ public class QuestDefinitionEditor : Editor
         switch (type)
         {
             case QuestStepType.ReachLocation:
-                y = DrawProp(stepEl.FindPropertyRelative("TargetLocation"), rect.x, y, rect.width, includeChildren: true);
+                y = DrawReachLocationDropdown(stepEl, rect.x, y, rect.width);
                 break;
 
             case QuestStepType.MinStats:
@@ -220,6 +224,11 @@ public class QuestDefinitionEditor : Editor
             y += HelpBoxHeight() + Spacing();
         }
 
+        if (EditorGUI.EndChangeCheck())
+        {
+            // Update auto text if needed
+            RefreshAutoTextForStep(stepEl);
+        }
         return y;
     }
 
@@ -266,17 +275,12 @@ public class QuestDefinitionEditor : Editor
 
         if (type == QuestStepType.ReachLocation)
         {
-            var loc = stepEl.FindPropertyRelative("TargetLocation");
+            var p = stepEl.FindPropertyRelative("TargetLocationSceneName");
+            if (p == null || p.propertyType != SerializedPropertyType.String)
+                return "ReachLocation: TargetLocationSceneName missing or wrong type.";
 
-            // Guard: only ObjectReference supports objectReferenceValue
-            if (loc == null)
-                return "ReachLocation: TargetLocation field not found (check QuestStepDefinition field name).";
-
-            if (loc.propertyType != SerializedPropertyType.ObjectReference)
-                return "ReachLocation: TargetLocation is not an ObjectReference (check field type - should be SceneReference).";
-
-            if (loc.objectReferenceValue == null)
-                return "ReachLocation: TargetLocation is not set.";
+            if (string.IsNullOrEmpty(p.stringValue))
+                return "ReachLocation: Target Location is not set.";
         }
 
         if (type == QuestStepType.MinStats)
@@ -341,7 +345,179 @@ public class QuestDefinitionEditor : Editor
         // Expand new step by default
         el.isExpanded = true;
 
+        RefreshAutoTextForStep(el);
+
         serializedObject.ApplyModifiedProperties();
+    }
+
+
+    // ----------------------
+    // Set auto text
+    // ----------------------
+
+    private static bool IsAutoText(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return true;
+        return s.StartsWith("[AUTO] ", StringComparison.Ordinal);
+    }
+
+    private static void SetAutoText(SerializedProperty stepEl, string value)
+    {
+        var textProp = stepEl.FindPropertyRelative("Text");
+        if (textProp == null) return;
+
+        // Only overwrite if empty or still auto-generated
+        if (!IsAutoText(textProp.stringValue))
+            return;
+
+        textProp.stringValue = "[AUTO] " + value;
+    }
+
+    private static void RefreshAutoTextForStep(SerializedProperty stepEl)
+    {
+        if (stepEl == null) return;
+
+        var typeProp = stepEl.FindPropertyRelative("Type");
+        if (typeProp == null) return;
+
+        var type = (QuestStepType)typeProp.intValue;
+
+        switch (type)
+        {
+            case QuestStepType.ReachLocation:
+                {
+                    var locProp = stepEl.FindPropertyRelative("TargetLocation");
+                    string locName = "<choose location>";
+                    if (locProp != null && locProp.propertyType == SerializedPropertyType.ObjectReference && locProp.objectReferenceValue != null)
+                    {
+                        // SceneReference usually has SceneName; but we don't want to reflect into it.
+                        // We'll use object name as a good placeholder.
+                        locName = locProp.objectReferenceValue.name;
+                    }
+                    SetAutoText(stepEl, $"Go to {locName}");
+                    break;
+                }
+
+            case QuestStepType.HaveMoney:
+                {
+                    int money = stepEl.FindPropertyRelative("RequiredMoney")?.intValue ?? 0;
+                    SetAutoText(stepEl, money > 0 ? $"Have ${money}" : "Have enough money");
+                    break;
+                }
+
+            case QuestStepType.PayMoney:
+                {
+                    int money = stepEl.FindPropertyRelative("RequiredMoney")?.intValue ?? 0;
+                    SetAutoText(stepEl, money > 0 ? $"Pay ${money}" : "Pay the required amount");
+                    break;
+                }
+
+            case QuestStepType.MinStats:
+                {
+                    int str = stepEl.FindPropertyRelative("RequiredStrength")?.intValue ?? 0;
+                    int intel = stepEl.FindPropertyRelative("RequiredIntellect")?.intValue ?? 0;
+
+                    if (str > 0 && intel > 0) SetAutoText(stepEl, $"Reach Strength {str} and Intellect {intel}");
+                    else if (str > 0) SetAutoText(stepEl, $"Reach Strength {str}");
+                    else if (intel > 0) SetAutoText(stepEl, $"Reach Intellect {intel}");
+                    else SetAutoText(stepEl, "Increase your stats");
+                    break;
+                }
+
+            case QuestStepType.Manual:
+                SetAutoText(stepEl, "Complete the objective");
+                break;
+
+            case QuestStepType.AutoComplete:
+                SetAutoText(stepEl, "Progress");
+                break;
+        }
+    }
+
+    private static float DrawReachLocationDropdown(SerializedProperty stepEl, float x, float y, float width)
+    {
+        var prop = stepEl.FindPropertyRelative("TargetLocationSceneName");
+        if (prop == null || prop.propertyType != SerializedPropertyType.String)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                "ReachLocation: TargetLocationSceneName missing or not a string. Check QuestStepDefinition field name/type.",
+                MessageType.Error);
+            return y + 40 + 4;
+        }
+
+        var db = SceneDatabase.Instance;
+        if (db == null)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                "SceneDatabase.Instance is null. Ensure a SceneDatabase asset exists in the project.",
+                MessageType.Warning);
+            return y + 40 + 4;
+        }
+
+        // Build dropdown options from SceneDatabase.Locations
+        var labels = new System.Collections.Generic.List<string>();
+        var values = new System.Collections.Generic.List<string>();
+
+        // Option 0 = None
+        labels.Add("<None>");
+        values.Add("");
+
+        if (db.Locations != null)
+        {
+            for (int i = 0; i < db.Locations.Count; i++)
+            {
+                // LocationEntry is a struct, never null
+                var entry = db.Locations[i];
+
+                var sr = entry.Scene;
+                if (sr == null || !sr.IsValid) continue;
+
+                var sceneName = sr.SceneName;
+                if (string.IsNullOrEmpty(sceneName)) continue;
+
+                // Label can include Id to be friendlier
+                var label = string.IsNullOrEmpty(entry.Id) ? sceneName : $"{entry.Id} ({sceneName})";
+
+                // Avoid duplicates
+                if (values.Contains(sceneName)) continue;
+
+                labels.Add(label);
+                values.Add(sceneName);
+            }
+        }
+
+        if (values.Count <= 1)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 34),
+                "SceneDatabase has no valid Locations entries to pick from.",
+                MessageType.Warning);
+            return y + 34 + 4;
+        }
+
+        // Current selection index
+        string cur = prop.stringValue ?? "";
+        int curIndex = 0;
+        for (int i = 0; i < values.Count; i++)
+        {
+            if (string.Equals(values[i], cur, StringComparison.Ordinal))
+            {
+                curIndex = i;
+                break;
+            }
+        }
+
+        var r = new Rect(x, y, width, EditorGUIUtility.singleLineHeight);
+        EditorGUI.BeginChangeCheck();
+        int newIndex = EditorGUI.Popup(r, "Target Location", curIndex, labels.ToArray());
+        if (EditorGUI.EndChangeCheck())
+        {
+            prop.stringValue = values[Mathf.Clamp(newIndex, 0, values.Count - 1)];
+
+            // If you have AUTO text placeholders, refresh them here
+            RefreshAutoTextForStep(stepEl);
+        }
+
+        return y + EditorGUIUtility.singleLineHeight + 4;
     }
 }
 #endif

@@ -32,7 +32,7 @@ public class QuestStepDefinition
     public QuestStepType Type = QuestStepType.Manual;
 
     [Header("Location (ReachLocation)")]
-    public SceneReference TargetLocation;
+    public string TargetLocationSceneName; // set by editor dropdown (no manual typing)
 
     [Header("Time Restrictions (optional; gates ANY step)")]
     public bool RestrictByDay = false;
