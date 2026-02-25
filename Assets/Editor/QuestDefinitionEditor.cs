@@ -386,15 +386,28 @@ public class QuestDefinitionEditor : Editor
         {
             case QuestStepType.ReachLocation:
                 {
-                    var locProp = stepEl.FindPropertyRelative("TargetLocation");
-                    string locName = "<choose location>";
-                    if (locProp != null && locProp.propertyType == SerializedPropertyType.ObjectReference && locProp.objectReferenceValue != null)
+                    var sceneNameProp = stepEl.FindPropertyRelative("TargetLocationSceneName");
+                    string sceneName = sceneNameProp != null ? sceneNameProp.stringValue : "";
+
+                    string label = string.IsNullOrEmpty(sceneName) ? "<choose location>" : sceneName;
+
+                    // Optional: make it prettier using SceneDatabase entry Id
+                    var db = SceneDatabase.Instance;
+                    if (db != null && !string.IsNullOrEmpty(sceneName) && db.Locations != null)
                     {
-                        // SceneReference usually has SceneName; but we don't want to reflect into it.
-                        // We'll use object name as a good placeholder.
-                        locName = locProp.objectReferenceValue.name;
+                        for (int i = 0; i < db.Locations.Count; i++)
+                        {
+                            var entry = db.Locations[i];
+                            if (entry.Scene == null || !entry.Scene.IsValid) continue;
+                            if (!string.Equals(entry.Scene.SceneName, sceneName, StringComparison.Ordinal)) continue;
+
+                            if (!string.IsNullOrEmpty(entry.Id))
+                                label = entry.Id; // show friendly id instead of raw scene name
+                            break;
+                        }
                     }
-                    SetAutoText(stepEl, $"Go to {locName}");
+
+                    SetAutoText(stepEl, $"Go to {label}");
                     break;
                 }
 
@@ -517,7 +530,7 @@ public class QuestDefinitionEditor : Editor
             RefreshAutoTextForStep(stepEl);
         }
 
-        return y + EditorGUIUtility.singleLineHeight + 4;
+        return y + EditorGUIUtility.singleLineHeight + Spacing();
     }
 }
 #endif
