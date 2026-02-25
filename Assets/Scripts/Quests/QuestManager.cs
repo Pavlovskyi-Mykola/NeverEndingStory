@@ -262,32 +262,31 @@ public sealed class QuestManager : MonoBehaviour
         if (step == null) return true;
 
         var tm = TimeManager.Instance;
-        if (tm == null) return true; // if time system absent, don't block
+        if (tm == null) return true;
 
+        // ---- Day check ----
         if (step.RestrictByDay)
         {
-            if (step.AllowedDays == null || step.AllowedDays.Length == 0) return false;
+            if (step.AllowedDays == DayOfWeekMask.None)
+                return false;
 
-            bool ok = false;
-            var day = tm.DayOfWeek;
-            for (int i = 0; i < step.AllowedDays.Length; i++)
-                if (step.AllowedDays[i] == day) { ok = true; break; }
+            var currentMask = DayOfWeekMaskExtensions.From(tm.DayOfWeek);
 
-            if (!ok) return false;
+            if ((step.AllowedDays & currentMask) == 0)
+                return false;
         }
 
+        // ---- Phase check ----
         if (step.RestrictByPhase)
         {
-            if (step.AllowedPhases == null || step.AllowedPhases.Length == 0) return false;
+            if (step.AllowedPhases == DayPhaseMask.None)
+                return false;
 
-            bool ok = false;
-            var phase = tm.TimeOfDay;
-            for (int i = 0; i < step.AllowedPhases.Length; i++)
-                if (step.AllowedPhases[i] == phase) { ok = true; break; }
+            var currentMask = DayPhaseMaskExtensions.From(tm.TimeOfDay);
 
-            if (!ok) return false;
+            if ((step.AllowedPhases & currentMask) == 0)
+                return false;
         }
-
         return true;
     }
 
@@ -296,12 +295,16 @@ public sealed class QuestManager : MonoBehaviour
         if (GameManager.Instance == null) return false;
         if (step.TargetLocation == null || !step.TargetLocation.IsValid) return false;
 
-        // Most robust: compare SceneReference if possible
+        // If you store SceneReference as current location
         if (GameManager.Instance.CurrentLocationRef != null)
             return GameManager.Instance.CurrentLocationRef == step.TargetLocation;
 
-        // Fallback: compare names
-        return string.Equals(GameManager.Instance.CurrentLocation, step.TargetLocation.SceneName, StringComparison.Ordinal);
+        // Fallback if using string
+        return string.Equals(
+            GameManager.Instance.CurrentLocation,
+            step.TargetLocation.SceneName,
+            StringComparison.Ordinal
+        );
     }
 
     private bool MeetsMinStats(QuestStepDefinition step)

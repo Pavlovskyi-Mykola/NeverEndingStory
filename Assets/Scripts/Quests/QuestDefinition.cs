@@ -27,20 +27,19 @@ public sealed class QuestDefinition : ScriptableObject
 public class QuestStepDefinition
 {
     [Header("Meta")]
-    public string StepId; // optional but helpful for debugging
+    public string StepId;
     [TextArea(1, 4)] public string Text;
-
     public QuestStepType Type = QuestStepType.Manual;
 
     [Header("Location (ReachLocation)")]
     public SceneReference TargetLocation;
 
-    [Header("Time restrictions (optional; gates ANY step)")]
+    [Header("Time Restrictions (optional; gates ANY step)")]
     public bool RestrictByDay = false;
-    public DayOfWeek[] AllowedDays;
+    public DayOfWeekMask AllowedDays = DayOfWeekMask.All;
 
     public bool RestrictByPhase = false;
-    public TimeOfDay[] AllowedPhases;
+    public DayPhaseMask AllowedPhases = DayPhaseMask.All;
 
     [Header("Stats requirements (MinStats)")]
     public int RequiredStrength = 0;
