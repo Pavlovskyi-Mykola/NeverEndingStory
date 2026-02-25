@@ -101,9 +101,6 @@ public class QuestDefinitionEditor : Editor
         h += PropHeight(stepId);
         h += Spacing();
 
-        h += PropHeight(stepEl.FindPropertyRelative("Type"));
-        h += Spacing();
-
         h += PropHeight(stepEl.FindPropertyRelative("Text"), includeChildren: true);
         h += Spacing();
 
@@ -181,9 +178,6 @@ public class QuestDefinitionEditor : Editor
             stepId.stringValue = $"step_{stepEl.propertyPath.GetHashCode():X8}";
 
         y += idH + Spacing();
-
-        // Type
-        y = DrawProp(stepEl.FindPropertyRelative("Type"), rect.x, y, rect.width);
 
         // Text
         y = DrawProp(stepEl.FindPropertyRelative("Text"), rect.x, y, rect.width, includeChildren: true);
