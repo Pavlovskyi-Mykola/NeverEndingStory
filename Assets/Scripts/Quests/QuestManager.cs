@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 public sealed class QuestManager : MonoBehaviour
@@ -25,6 +25,9 @@ public sealed class QuestManager : MonoBehaviour
         // Also listen for late-created singletons
         TimeManager.InstanceReady += HandleTimeManagerReady;
         GameManager.InstanceReady += HandleGameManagerReady;
+        DialogueRunner.InstanceReady += HandleDialogueRunnerReady;
+        if (DialogueRunner.Instance != null)
+            HandleDialogueRunnerReady(DialogueRunner.Instance);
     }
 
     private void OnDisable()
@@ -32,6 +35,9 @@ public sealed class QuestManager : MonoBehaviour
         Unhook();
         TimeManager.InstanceReady -= HandleTimeManagerReady;
         GameManager.InstanceReady -= HandleGameManagerReady;
+        DialogueRunner.InstanceReady -= HandleDialogueRunnerReady;
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.OnDialogueFinished -= HandleDialogueFinished;
     }
 
     private void HandleTimeManagerReady(TimeManager tm)
@@ -371,6 +377,9 @@ public sealed class QuestManager : MonoBehaviour
             case QuestStepType.PayMoney:
                 // "Complete" means "can pay now" (payment happens in ApplyStepCompletionEffects)
                 return CanPay(step);
+            //Since we’re completing it directly in the handler, technically don’t need this. for clarity makes it explicit.
+            case QuestStepType.TalkToNpc:
+                return false; // completed only by dialogue event
 
             default:
                 return false;
@@ -389,5 +398,51 @@ public sealed class QuestManager : MonoBehaviour
             default:
                 return true;
         }
+    }
+    private void HandleDialogueRunnerReady(DialogueRunner runner)
+    {
+        runner.OnDialogueFinished -= HandleDialogueFinished;
+        runner.OnDialogueFinished += HandleDialogueFinished;
+    }
+
+    private void HandleDialogueFinished(string npcId, string dialogueId)
+    {
+        if (Journal == null) return;
+
+        bool changed = false;
+
+        foreach (var questId in Journal.Active)
+        {
+            if (!TryGetDefAndProg(questId, out var def, out var prog)) continue;
+
+            var step = GetCurrentStep(def, prog);
+            if (step == null) continue;
+
+            if (step.Type != QuestStepType.TalkToNpc) continue;
+
+            // Time gates still apply
+            if (!MeetsTimeConstraints(step)) continue;
+
+            // npc must match
+            if (string.IsNullOrEmpty(step.TargetNpcId)) continue;
+            if (!string.Equals(step.TargetNpcId, npcId, StringComparison.Ordinal)) continue;
+
+            // optional dialogue id check
+            if (!string.IsNullOrEmpty(step.TargetDialogueId) &&
+                !string.Equals(step.TargetDialogueId, dialogueId, StringComparison.Ordinal))
+                continue;
+
+            // ✅ Complete this step immediately
+            prog.CurrentStepIndex++;
+            prog.ManualStepCompleted = false;
+            prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
+            changed = true;
+
+            // Continue advancing in case next steps are AutoComplete, etc.
+            TryAdvanceQuest(questId);
+        }
+
+        if (changed)
+            OnQuestStateChanged?.Invoke();
     }
 }

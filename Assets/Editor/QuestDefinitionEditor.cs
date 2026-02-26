@@ -69,6 +69,7 @@ public class QuestDefinitionEditor : Editor
             menu.AddItem(new GUIContent("Require Money"), false, () => AddStep(QuestStepType.HaveMoney));
             menu.AddItem(new GUIContent("Pay Money"), false, () => AddStep(QuestStepType.PayMoney));
             menu.AddItem(new GUIContent("AutoComplete"), false, () => AddStep(QuestStepType.AutoComplete));
+            menu.AddItem(new GUIContent("Talk To NPC"), false, () => AddStep(QuestStepType.TalkToNpc));
             menu.DropDown(buttonRect);
         };
     }
@@ -128,6 +129,10 @@ public class QuestDefinitionEditor : Editor
             case QuestStepType.PayMoney:
                 h += PropHeight(stepEl.FindPropertyRelative("RequiredMoney"));
                 h += Spacing();
+                break;
+            case QuestStepType.TalkToNpc:
+                h += EditorGUIUtility.singleLineHeight + Spacing(); // NPC popup row
+                h += PropHeight(stepEl.FindPropertyRelative("TargetDialogueId")) + Spacing(); // if you draw dialogue id
                 break;
         }
 
@@ -203,6 +208,11 @@ public class QuestDefinitionEditor : Editor
             case QuestStepType.HaveMoney:
             case QuestStepType.PayMoney:
                 y = DrawProp(stepEl.FindPropertyRelative("RequiredMoney"), rect.x, y, rect.width);
+                break;
+            case QuestStepType.TalkToNpc:
+                y = DrawTalkToNpcPicker(stepEl, rect.x, y, rect.width);
+                // Optional: show dialogue id field only if you want this feature now
+                y = DrawProp(stepEl.FindPropertyRelative("TargetDialogueId"), rect.x, y, rect.width);
                 break;
         }
 
@@ -312,6 +322,16 @@ public class QuestDefinitionEditor : Editor
             if (phases == 0) return "RestrictByPhase is enabled but AllowedPhases is empty.";
         }
 
+        if (type == QuestStepType.TalkToNpc)
+        {
+            var p = stepEl.FindPropertyRelative("TargetNpcId");
+            if (p == null || p.propertyType != SerializedPropertyType.String)
+                return "TalkToNpc: TargetNpcId missing or wrong type.";
+
+            if (string.IsNullOrEmpty(p.stringValue))
+                return "TalkToNpc: Target NPC is not set.";
+        }
+
         return null;
     }
 
@@ -410,21 +430,18 @@ public class QuestDefinitionEditor : Editor
                     SetAutoText(stepEl, $"Go to {label}");
                     break;
                 }
-
             case QuestStepType.HaveMoney:
                 {
                     int money = stepEl.FindPropertyRelative("RequiredMoney")?.intValue ?? 0;
                     SetAutoText(stepEl, money > 0 ? $"Have ${money}" : "Have enough money");
                     break;
                 }
-
             case QuestStepType.PayMoney:
                 {
                     int money = stepEl.FindPropertyRelative("RequiredMoney")?.intValue ?? 0;
                     SetAutoText(stepEl, money > 0 ? $"Pay ${money}" : "Pay the required amount");
                     break;
                 }
-
             case QuestStepType.MinStats:
                 {
                     int str = stepEl.FindPropertyRelative("RequiredStrength")?.intValue ?? 0;
@@ -436,7 +453,6 @@ public class QuestDefinitionEditor : Editor
                     else SetAutoText(stepEl, "Increase your stats");
                     break;
                 }
-
             case QuestStepType.Manual:
                 SetAutoText(stepEl, "Complete the objective");
                 break;
@@ -444,6 +460,13 @@ public class QuestDefinitionEditor : Editor
             case QuestStepType.AutoComplete:
                 SetAutoText(stepEl, "Progress");
                 break;
+            case QuestStepType.TalkToNpc:
+                {
+                    var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+                    string npc = npcProp != null ? npcProp.stringValue : "";
+                    SetAutoText(stepEl, string.IsNullOrEmpty(npc) ? "Talk to <choose npc>" : $"Talk to {npc}");
+                    break;
+                }
         }
     }
 
@@ -531,6 +554,105 @@ public class QuestDefinitionEditor : Editor
         }
 
         return y + EditorGUIUtility.singleLineHeight + Spacing();
+    }
+
+    private static float DrawTalkToNpcPicker(SerializedProperty stepEl, float x, float y, float width)
+    {
+        var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+        if (npcProp == null || npcProp.propertyType != SerializedPropertyType.String)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                "TalkToNpc: TargetNpcId missing or not a string. Check QuestStepDefinition.",
+                MessageType.Error);
+            return y + 40 + Spacing();
+        }
+
+        BuildNpcOptions(out var labels, out var values);
+
+        if (values.Count == 0)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                "No NPC ids found. Open Bootstrap (NpcManager) or create NpcDefinition assets with NpcId set.",
+                MessageType.Warning);
+            return y + 40 + Spacing();
+        }
+
+        // Current selection index
+        string cur = npcProp.stringValue ?? "";
+        int curIndex = 0;
+        for (int i = 0; i < values.Count; i++)
+        {
+            if (string.Equals(values[i], cur, StringComparison.Ordinal))
+            {
+                curIndex = i;
+                break;
+            }
+        }
+
+        var r = new Rect(x, y, width, EditorGUIUtility.singleLineHeight);
+
+        EditorGUI.BeginChangeCheck();
+        int newIndex = EditorGUI.Popup(r, "Target NPC", curIndex, labels.ToArray());
+        if (EditorGUI.EndChangeCheck())
+        {
+            npcProp.stringValue = values[Mathf.Clamp(newIndex, 0, values.Count - 1)];
+
+            // Update auto text if you're using [AUTO] placeholders
+            RefreshAutoTextForStep(stepEl);
+        }
+
+        return y + EditorGUIUtility.singleLineHeight + Spacing();
+    }
+
+    private static void BuildNpcOptions(out System.Collections.Generic.List<string> labels, out System.Collections.Generic.List<string> values)
+    {
+        labels = new System.Collections.Generic.List<string>();
+        values = new System.Collections.Generic.List<string>();
+
+        // Always include None
+        labels.Add("<None>");
+        values.Add("");
+
+        // 1) Prefer NpcManager in open scenes (edit mode safe)
+        var mgr = UnityEngine.Object.FindFirstObjectByType<NpcManager>();
+        if (mgr != null && mgr.Npcs != null)
+        {
+            for (int i = 0; i < mgr.Npcs.Count; i++)
+            {
+                var def = mgr.Npcs[i];
+                if (def == null) continue;
+
+                var id = def.NpcId;
+                if (string.IsNullOrWhiteSpace(id)) continue;
+
+                if (!values.Contains(id))
+                {
+                    labels.Add(id);
+                    values.Add(id);
+                }
+            }
+
+            // If we found anything, stop here (most accurate to current game config)
+            if (values.Count > 1) return;
+        }
+
+        // 2) Fallback: scan project for NpcDefinition assets
+        string[] guids = AssetDatabase.FindAssets("t:NpcDefinition");
+        for (int g = 0; g < guids.Length; g++)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guids[g]);
+            var def = AssetDatabase.LoadAssetAtPath<NpcDefinition>(path);
+            if (def == null) continue;
+
+            var id = def.NpcId;
+            if (string.IsNullOrWhiteSpace(id)) continue;
+
+            if (!values.Contains(id))
+            {
+                labels.Add(id);
+                values.Add(id);
+            }
+        }
     }
 }
 #endif

@@ -47,4 +47,8 @@ public class QuestStepDefinition
 
     [Header("Money (HaveMoney / PayMoney)")]
     public int RequiredMoney = 0;
+
+    [Header("Dialogue (TalkToNpc)")]
+    public string TargetNpcId;       // required for TalkToNpc
+    public string TargetDialogueId;  // optional; if empty => any dialogue with that NPC
 }

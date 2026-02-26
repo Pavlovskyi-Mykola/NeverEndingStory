@@ -30,7 +30,9 @@ public class NpcDialogueLauncher : MonoBehaviour
             return;
         }
 
-        DialogueRunner.Instance.StartDialogue(graph);
+        //Pass npcId/locationId to DialogueRunner
+        var context = DialogueContext.From(_npcId, _locationId);
+        DialogueRunner.Instance.StartDialogue(graph, context);
     }
 }
 

@@ -26,6 +26,21 @@ public struct DialogueTurn
     public List<PresentedChoice> Choices;
 }
 
+public struct DialogueContext
+{
+    public string NpcId;
+    public string LocationId;
+
+    public static DialogueContext From(string npcId, string locationId)
+    {
+        return new DialogueContext
+        {
+            NpcId = npcId,
+            LocationId = locationId
+        };
+    }
+}
+
 public class DialogueRunner : MonoBehaviour
 {
     public static DialogueRunner Instance { get; private set; }
@@ -60,16 +75,31 @@ public class DialogueRunner : MonoBehaviour
     // You can later replace this with NpcManager.PlayerSpeakerId if you want
     private const string PlayerSpeakerId = "Player";
 
+    //QUESTS related
+    public static event Action<DialogueRunner> InstanceReady;
+    public event Action<string, string> OnDialogueFinished; // (npcId, dialogueId)
+    private DialogueContext _context;
+    private bool _hasContext;
+
     private void Awake()
     {
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
+        InstanceReady?.Invoke(this);
         DontDestroyOnLoad(gameObject);
     }
 
     public void StartDialogue(DialogueGraph graph)
     {
+        StartDialogue(graph, default);
+    }
+
+    public void StartDialogue(DialogueGraph graph, DialogueContext context)
+    {
         if (graph == null) return;
+
+        _context = context;
+        _hasContext = !string.IsNullOrEmpty(context.NpcId) || !string.IsNullOrEmpty(context.LocationId);
 
         _graph = graph;
         _current = _graph.GetNode(_graph.StartNodeId);
@@ -90,8 +120,6 @@ public class DialogueRunner : MonoBehaviour
         {
             journal.OnDialogueStarted(_activeDialogueId);
             _hasStartedJournal = true;
-
-            // Optional: mark starting node as visited immediately
             journal.GetOrCreateProgress(_activeDialogueId)?.MarkNodeVisited(_current.Id);
         }
 
@@ -111,6 +139,12 @@ public class DialogueRunner : MonoBehaviour
                 _current != null ? _current.Id : null
             );
         }
+        // --- Quest hook: dialogue finished ---
+        if (!string.IsNullOrEmpty(_activeDialogueId))
+        {
+            string npcId = _hasContext ? _context.NpcId : null;
+            OnDialogueFinished?.Invoke(npcId, _activeDialogueId);
+        }
 
         _graph = null;
         _current = null;
@@ -122,6 +156,9 @@ public class DialogueRunner : MonoBehaviour
         IsAdvancing = false;
         _activeDialogueId = null;
         _hasStartedJournal = false;
+        //quest related
+        _context = default;
+        _hasContext = false;
 
         OnDialogueStateChanged?.Invoke(false);
         OnHideDialogue?.Invoke();
