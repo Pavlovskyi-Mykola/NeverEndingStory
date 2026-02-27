@@ -20,6 +20,8 @@ public sealed class QuestProgress
     public int TimesCompleted { get => timesCompleted; set => timesCompleted = value; }
     public string LastUpdatedUtc { get => lastUpdatedUtc; set => lastUpdatedUtc = value; }
 
+    public int LastConsumedTalkToken;
+
     public QuestProgress(string questId)
     {
         this.questId = questId;

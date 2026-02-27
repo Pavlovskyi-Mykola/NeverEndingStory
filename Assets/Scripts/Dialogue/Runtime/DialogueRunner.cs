@@ -77,9 +77,11 @@ public class DialogueRunner : MonoBehaviour
 
     //QUESTS related
     public static event Action<DialogueRunner> InstanceReady;
-    public event Action<string, string> OnDialogueFinished; // (npcId, dialogueId)
+    //public event Action<string, string> OnDialogueFinished; // (npcId, dialogueId)
     private DialogueContext _context;
     private bool _hasContext;
+    //quest new flow
+    public event Action<string> OnTalkedToNpc; // npcId
 
     private void Awake()
     {
@@ -112,7 +114,7 @@ public class DialogueRunner : MonoBehaviour
         }
 
         // ---- Journal start ----
-        _activeDialogueId = _graph.DialogueId;
+        _activeDialogueId = !string.IsNullOrEmpty(_graph.DialogueId)? _graph.DialogueId: _graph.name; // fallback so quests/journal still work 
         _hasStartedJournal = false;
 
         var journal = DialogueJournal.Instance;
@@ -139,13 +141,12 @@ public class DialogueRunner : MonoBehaviour
                 _current != null ? _current.Id : null
             );
         }
-        // --- Quest hook: dialogue finished ---
-        if (!string.IsNullOrEmpty(_activeDialogueId))
-        {
-            string npcId = _hasContext ? _context.NpcId : null;
-            OnDialogueFinished?.Invoke(npcId, _activeDialogueId);
-        }
 
+        // quest new flow - Notify systems that a talk with NPC happened
+        if (_hasContext && !string.IsNullOrEmpty(_context.NpcId))
+        {
+            OnTalkedToNpc?.Invoke(_context.NpcId);
+        }
         _graph = null;
         _current = null;
         _pendingCloseTraversalStartId = null;

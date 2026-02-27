@@ -132,7 +132,6 @@ public class QuestDefinitionEditor : Editor
                 break;
             case QuestStepType.TalkToNpc:
                 h += EditorGUIUtility.singleLineHeight + Spacing(); // NPC popup row
-                h += PropHeight(stepEl.FindPropertyRelative("TargetDialogueId")) + Spacing(); // if you draw dialogue id
                 break;
         }
 
@@ -211,8 +210,6 @@ public class QuestDefinitionEditor : Editor
                 break;
             case QuestStepType.TalkToNpc:
                 y = DrawTalkToNpcPicker(stepEl, rect.x, y, rect.width);
-                // Optional: show dialogue id field only if you want this feature now
-                y = DrawProp(stepEl.FindPropertyRelative("TargetDialogueId"), rect.x, y, rect.width);
                 break;
         }
 

@@ -4,11 +4,15 @@ using UnityEngine;
 public sealed class QuestManager : MonoBehaviour
 {
     public static QuestManager Instance { get; private set; }
+    public static event Action<QuestManager> InstanceReady;
 
     [Header("Data")]
     [SerializeField] private QuestDatabase database;
 
     public event Action OnQuestStateChanged;
+
+    private int _talkToken = 0;
+    private string _lastTalkNpcId = null;
 
     private QuestJournal Journal => QuestJournal.Instance;
 
@@ -17,6 +21,7 @@ public sealed class QuestManager : MonoBehaviour
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        InstanceReady?.Invoke(this);
     }
 
     private void OnEnable()
@@ -35,9 +40,8 @@ public sealed class QuestManager : MonoBehaviour
         Unhook();
         TimeManager.InstanceReady -= HandleTimeManagerReady;
         GameManager.InstanceReady -= HandleGameManagerReady;
-        DialogueRunner.InstanceReady -= HandleDialogueRunnerReady;
         if (DialogueRunner.Instance != null)
-            DialogueRunner.Instance.OnDialogueFinished -= HandleDialogueFinished;
+            DialogueRunner.Instance.OnTalkedToNpc -= HandleTalkedToNpc;
     }
 
     private void HandleTimeManagerReady(TimeManager tm)
@@ -50,6 +54,21 @@ public sealed class QuestManager : MonoBehaviour
     {
         UnhookGame();
         HookGame();
+    }
+    private void HandleDialogueRunnerReady(DialogueRunner runner)
+    {
+        runner.OnTalkedToNpc -= HandleTalkedToNpc;
+        runner.OnTalkedToNpc += HandleTalkedToNpc;
+    }
+    private void HandleTalkedToNpc(string npcId)
+    {
+        if (string.IsNullOrEmpty(npcId)) return;
+
+        _talkToken++;
+        _lastTalkNpcId = npcId;
+
+        // One unified evaluation path
+        TryAdvanceAllActive();
     }
 
     private void Hook()
@@ -125,8 +144,17 @@ public sealed class QuestManager : MonoBehaviour
         if (Journal == null) return;
 
         bool changed = false;
-        foreach (var questId in Journal.Active)
+
+        // Snapshot to avoid “collection modified” when quests complete
+        var snapshot = new System.Collections.Generic.List<string>(Journal.Active);
+
+        for (int i = 0; i < snapshot.Count; i++)
+        {
+            var questId = snapshot[i];
+            if (!Journal.IsActive(questId)) continue;
+
             changed |= TryAdvanceQuest(questId);
+        }
 
         if (changed)
             OnQuestStateChanged?.Invoke();
@@ -195,6 +223,12 @@ public sealed class QuestManager : MonoBehaviour
 
         while (true)
         {
+            if (prog.CurrentStepIndex >= def.Steps.Count)
+            {
+                Journal.MarkCompleted(questId);
+                changed = true;
+                break;
+            }
             var step = GetCurrentStep(def, prog);
             if (step == null)
             {
@@ -214,6 +248,9 @@ public sealed class QuestManager : MonoBehaviour
             if (!ApplyStepCompletionEffects(step))
                 break;
 
+            // Consume talk event so it won’t complete multiple quests/steps unintentionally
+            if (step.Type == QuestStepType.TalkToNpc)
+                prog.LastConsumedTalkToken = _talkToken;
             // Consume step -> next
             prog.CurrentStepIndex++;
             prog.ManualStepCompleted = false;
@@ -253,7 +290,9 @@ public sealed class QuestManager : MonoBehaviour
         prog = Journal.GetOrCreateProgress(questId);
         if (prog == null) return false;
 
-        prog.CurrentStepIndex = Mathf.Clamp(prog.CurrentStepIndex, 0, Mathf.Max(0, def.Steps.Count - 1));
+        // Only guard against negative; DO NOT clamp upper bound.
+        // We need to allow ">= Steps.Count" to mean "completed".
+        if (prog.CurrentStepIndex < 0) prog.CurrentStepIndex = 0;
         return true;
     }
 
@@ -379,8 +418,9 @@ public sealed class QuestManager : MonoBehaviour
                 return CanPay(step);
             //Since we’re completing it directly in the handler, technically don’t need this. for clarity makes it explicit.
             case QuestStepType.TalkToNpc:
-                return false; // completed only by dialogue event
-
+                return !string.IsNullOrEmpty(step.TargetNpcId)
+                    && string.Equals(step.TargetNpcId, _lastTalkNpcId, StringComparison.Ordinal)
+                    && prog.LastConsumedTalkToken != _talkToken;
             default:
                 return false;
         }
@@ -399,50 +439,12 @@ public sealed class QuestManager : MonoBehaviour
                 return true;
         }
     }
-    private void HandleDialogueRunnerReady(DialogueRunner runner)
+
+    //UI show info
+    public bool TryGetDefinition(string questId, out QuestDefinition def)
     {
-        runner.OnDialogueFinished -= HandleDialogueFinished;
-        runner.OnDialogueFinished += HandleDialogueFinished;
-    }
-
-    private void HandleDialogueFinished(string npcId, string dialogueId)
-    {
-        if (Journal == null) return;
-
-        bool changed = false;
-
-        foreach (var questId in Journal.Active)
-        {
-            if (!TryGetDefAndProg(questId, out var def, out var prog)) continue;
-
-            var step = GetCurrentStep(def, prog);
-            if (step == null) continue;
-
-            if (step.Type != QuestStepType.TalkToNpc) continue;
-
-            // Time gates still apply
-            if (!MeetsTimeConstraints(step)) continue;
-
-            // npc must match
-            if (string.IsNullOrEmpty(step.TargetNpcId)) continue;
-            if (!string.Equals(step.TargetNpcId, npcId, StringComparison.Ordinal)) continue;
-
-            // optional dialogue id check
-            if (!string.IsNullOrEmpty(step.TargetDialogueId) &&
-                !string.Equals(step.TargetDialogueId, dialogueId, StringComparison.Ordinal))
-                continue;
-
-            // ✅ Complete this step immediately
-            prog.CurrentStepIndex++;
-            prog.ManualStepCompleted = false;
-            prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
-            changed = true;
-
-            // Continue advancing in case next steps are AutoComplete, etc.
-            TryAdvanceQuest(questId);
-        }
-
-        if (changed)
-            OnQuestStateChanged?.Invoke();
+        def = null;
+        if (database == null) return false;
+        return database.TryGet(questId, out def) && def != null;
     }
 }
