@@ -142,10 +142,14 @@ public class DialogueRunner : MonoBehaviour
             );
         }
 
+        // Cache before we clear state
+        var finishedDialogueId = _activeDialogueId;
+
         // quest new flow - Notify systems that a talk with NPC happened
         if (_hasContext && !string.IsNullOrEmpty(_context.NpcId))
         {
-            OnTalkedToNpc?.Invoke(_context.NpcId);
+            GameEvents.RaiseNpcTalked(_context.NpcId, finishedDialogueId);
+            OnTalkedToNpc?.Invoke(_context.NpcId); // you can remove later if you want
         }
         _graph = null;
         _current = null;

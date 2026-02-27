@@ -36,7 +36,7 @@ public class TimeManager : MonoBehaviour
     private void Start()
     {
         // Push initial state to UI/listeners
-        RaiseTimeChanged();
+        RaiseTimeChanged(TimeChangeSource.System);
     }
 
     public void AdvancePhase(TimeChangeSource source)
@@ -57,19 +57,20 @@ public class TimeManager : MonoBehaviour
                 break;
         }
 
-        RaiseTimeChanged();
+        RaiseTimeChanged(source);
     }
 
     public void SetTime(DayOfWeek newDay, TimeOfDay newPhase)
     {
         dayOfWeek = newDay;
         timeOfDay = newPhase;
-        RaiseTimeChanged();
+        RaiseTimeChanged(TimeChangeSource.System);
     }
 
-    private void RaiseTimeChanged()
+    private void RaiseTimeChanged(TimeChangeSource source)
     {
         OnTimeChanged?.Invoke(dayOfWeek, timeOfDay);
+        GameEvents.RaiseTimeChanged(dayOfWeek, timeOfDay, source);
     }
 
     private static DayOfWeek NextDay(DayOfWeek day)
@@ -90,8 +91,6 @@ public class TimeManager : MonoBehaviour
         timeOfDay = TimeOfDay.Morning;
         dayOfWeek = NextDay(dayOfWeek);
 
-        RaiseTimeChanged();
+        RaiseTimeChanged(source);
     }
-
-
 }

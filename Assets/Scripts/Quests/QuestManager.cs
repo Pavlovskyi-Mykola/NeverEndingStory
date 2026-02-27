@@ -26,116 +26,43 @@ public sealed class QuestManager : MonoBehaviour
 
     private void OnEnable()
     {
-        Hook();
-        // Also listen for late-created singletons
-        TimeManager.InstanceReady += HandleTimeManagerReady;
-        GameManager.InstanceReady += HandleGameManagerReady;
-        DialogueRunner.InstanceReady += HandleDialogueRunnerReady;
-        if (DialogueRunner.Instance != null)
-            HandleDialogueRunnerReady(DialogueRunner.Instance);
+        // One unified event surface.
+        GameEvents.TimeChanged += HandleTimeChanged;
+        GameEvents.LocationEntered += HandleLocationEntered;
+        GameEvents.StatsChanged += HandleStatsChanged;
+        GameEvents.NpcTalked += HandleNpcTalked;
     }
 
     private void OnDisable()
     {
-        Unhook();
-        TimeManager.InstanceReady -= HandleTimeManagerReady;
-        GameManager.InstanceReady -= HandleGameManagerReady;
-        if (DialogueRunner.Instance != null)
-            DialogueRunner.Instance.OnTalkedToNpc -= HandleTalkedToNpc;
+        GameEvents.TimeChanged -= HandleTimeChanged;
+        GameEvents.LocationEntered -= HandleLocationEntered;
+        GameEvents.StatsChanged -= HandleStatsChanged;
+        GameEvents.NpcTalked -= HandleNpcTalked;
     }
 
-    private void HandleTimeManagerReady(TimeManager tm)
-    {
-        UnhookTime();
-        HookTime();
-    }
-
-    private void HandleGameManagerReady(GameManager gm)
-    {
-        UnhookGame();
-        HookGame();
-    }
-    private void HandleDialogueRunnerReady(DialogueRunner runner)
-    {
-        runner.OnTalkedToNpc -= HandleTalkedToNpc;
-        runner.OnTalkedToNpc += HandleTalkedToNpc;
-    }
-    private void HandleTalkedToNpc(string npcId)
+    private void HandleNpcTalked(string npcId, string dialogueId)
     {
         if (string.IsNullOrEmpty(npcId)) return;
 
         _talkToken++;
         _lastTalkNpcId = npcId;
 
-        // One unified evaluation path
         TryAdvanceAllActive();
     }
 
-    private void Hook()
+    private void HandleTimeChanged(DayOfWeek day, TimeOfDay phase, TimeChangeSource source)
     {
-        HookTime();
-        HookGame();
-        HookStats();
-    }
-
-    private void Unhook()
-    {
-        UnhookTime();
-        UnhookGame();
-        UnhookStats();
-    }
-
-    private void HookTime()
-    {
-        if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
-    }
-
-    private void UnhookTime()
-    {
-        if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
-    }
-
-    private void HookGame()
-    {
-        if (GameManager.Instance != null)
-            GameManager.Instance.LocationReady += HandleLocationReady;
-    }
-
-    private void UnhookGame()
-    {
-        if (GameManager.Instance != null)
-            GameManager.Instance.LocationReady -= HandleLocationReady;
-    }
-
-    private void HookStats()
-    {
-        if (PlayerStatsManager.Instance != null)
-            PlayerStatsManager.Instance.OnStatsChanged += HandleStatsChanged;
-    }
-
-    private void UnhookStats()
-    {
-        if (PlayerStatsManager.Instance != null)
-            PlayerStatsManager.Instance.OnStatsChanged -= HandleStatsChanged;
-    }
-
-    private void HandleTimeChanged(DayOfWeek day, TimeOfDay phase)
-    {
-        // Any time gate might open/close
         TryAdvanceAllActive();
     }
 
-    private void HandleLocationReady(SceneReference location)
+    private void HandleLocationEntered(string locationSceneName)
     {
-        // Location-dependent steps might complete
         TryAdvanceAllActive();
     }
 
-    private void HandleStatsChanged()
+    private void HandleStatsChanged(GameEvents.StatsSnapshot snapshot)
     {
-        // MinStats / money conditions might complete
         TryAdvanceAllActive();
     }
 
@@ -190,28 +117,6 @@ public sealed class QuestManager : MonoBehaviour
 
         OnQuestStateChanged?.Invoke();
         return true;
-    }
-
-    public bool IsActive(string questId) => Journal != null && Journal.IsActive(questId);
-    public bool IsCompleted(string questId) => Journal != null && Journal.IsCompleted(questId);
-    public QuestProgress GetProgress(string questId) => Journal != null ? Journal.GetOrCreateProgress(questId) : null;
-
-    public bool CompleteManualStep(string questId)
-    {
-        if (!TryGetDefAndProg(questId, out var def, out var prog)) return false;
-        if (!Journal.IsActive(questId)) return false;
-
-        var step = GetCurrentStep(def, prog);
-        if (step == null) return false;
-
-        if (step.Type != QuestStepType.Manual) return false;
-
-        prog.ManualStepCompleted = true;
-        prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
-
-        var advanced = TryAdvanceQuest(questId);
-        OnQuestStateChanged?.Invoke();
-        return advanced;
     }
 
     public bool TryAdvanceQuest(string questId)
