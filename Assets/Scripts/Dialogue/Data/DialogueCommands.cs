@@ -50,8 +50,8 @@ public class DialogueCommand
                 break;
 
             case DialogueCommandType.SetFlag:
-                if (FlagsManager.Instance != null)
-                    FlagsManager.Instance.SetFlag(stringValue, boolValue);
+                if (WorldState.Instance != null)
+                    WorldState.Instance.SetFlag(stringValue, boolValue);
                 break;
         }
     }

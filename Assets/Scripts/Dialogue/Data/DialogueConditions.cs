@@ -56,8 +56,8 @@ public class DialogueConditionGroup
             case DialogueConditionType.TimeOfDayIs:
                 return TimeManager.Instance != null && TimeManager.Instance.TimeOfDay == c.timeOfDayValue;
 
-            case DialogueConditionType.FlagIsTrue:
-                return FlagsManager.Instance != null && FlagsManager.Instance.GetFlag(c.stringValue);
+            //case DialogueConditionType.FlagIsTrue:
+            //    return FlagsManager.Instance != null && FlagsManager.Instance.GetFlag(c.stringValue);
 
             default:
                 return true;
