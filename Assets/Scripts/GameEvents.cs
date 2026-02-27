@@ -68,4 +68,13 @@ public static class GameEvents
     {
         StatsChanged?.Invoke(new StatsSnapshot(money, strength, intellect));
     }
+
+    //Now quests can re-check whenever flags change.
+    public static event Action<string, bool> FlagChanged; // (key, value)
+
+    public static void RaiseFlagChanged(string key, bool value)
+    {
+        if (string.IsNullOrEmpty(key)) return;
+        FlagChanged?.Invoke(key, value);
+    }
 }

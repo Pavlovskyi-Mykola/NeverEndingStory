@@ -31,6 +31,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.LocationEntered += HandleLocationEntered;
         GameEvents.StatsChanged += HandleStatsChanged;
         GameEvents.NpcTalked += HandleNpcTalked;
+        GameEvents.FlagChanged += HandleFlagChanged;
     }
 
     private void OnDisable()
@@ -39,6 +40,13 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.LocationEntered -= HandleLocationEntered;
         GameEvents.StatsChanged -= HandleStatsChanged;
         GameEvents.NpcTalked -= HandleNpcTalked;
+        GameEvents.FlagChanged -= HandleFlagChanged;
+    }
+
+    //flags become a first-class quest trigger
+    private void HandleFlagChanged(string key, bool value)
+    {
+        TryAdvanceAllActive();
     }
 
     private void HandleNpcTalked(string npcId, string dialogueId)
