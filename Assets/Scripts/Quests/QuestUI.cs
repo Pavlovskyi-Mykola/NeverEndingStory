@@ -5,11 +5,17 @@ using UnityEngine.UI;
 
 public sealed class QuestUI : MonoBehaviour
 {
-    [Header("List")]
-    [SerializeField] private Transform listParent;              // Content object under ScrollRect
-    [SerializeField] private QuestListItemUI listItemPrefab;    // Prefab created above
+    [Header("Journal")]
+    [SerializeField] private GameObject journalPanel;
+    [SerializeField] private Button openJournalButton;
+    [SerializeField] private Button closeJournalButton;
+    [SerializeField] private bool closeJournalAfterSelection = true;
 
-    [Header("Details")]
+    [Header("List")]
+    [SerializeField] private Transform listParent;
+    [SerializeField] private QuestListItemUI listItemPrefab;
+
+    [Header("Tracked Quest Details")]
     [SerializeField] private Text titleText;
     [SerializeField] private Text descriptionText;
     [SerializeField] private Text objectiveText;
@@ -28,6 +34,21 @@ public sealed class QuestUI : MonoBehaviour
         if (QuestManager.Instance != null)
             HandleQuestManagerReady(QuestManager.Instance);
 
+        if (openJournalButton != null)
+        {
+            openJournalButton.onClick.RemoveListener(OpenJournal);
+            openJournalButton.onClick.AddListener(OpenJournal);
+        }
+
+        if (closeJournalButton != null)
+        {
+            closeJournalButton.onClick.RemoveListener(CloseJournal);
+            closeJournalButton.onClick.AddListener(CloseJournal);
+        }
+
+        if (journalPanel != null)
+            journalPanel.SetActive(false);
+
         Refresh();
     }
 
@@ -37,6 +58,12 @@ public sealed class QuestUI : MonoBehaviour
 
         if (QuestManager.Instance != null)
             QuestManager.Instance.OnQuestStateChanged -= HandleQuestStateChanged;
+
+        if (openJournalButton != null)
+            openJournalButton.onClick.RemoveListener(OpenJournal);
+
+        if (closeJournalButton != null)
+            closeJournalButton.onClick.RemoveListener(CloseJournal);
     }
 
     private void HandleQuestManagerReady(QuestManager qm)
@@ -50,15 +77,30 @@ public sealed class QuestUI : MonoBehaviour
         Refresh();
     }
 
+    public void OpenJournal()
+    {
+        if (journalPanel != null)
+            journalPanel.SetActive(true);
+    }
+
+    public void CloseJournal()
+    {
+        if (journalPanel != null)
+            journalPanel.SetActive(false);
+    }
+
+    public void ToggleJournal()
+    {
+        if (journalPanel != null)
+            journalPanel.SetActive(!journalPanel.activeSelf);
+    }
+
     public void Refresh()
     {
-        if (listParent == null || listItemPrefab == null)
-            return;
-
-        ClearList();
-
         var qm = QuestManager.Instance;
         var journal = QuestJournal.Instance;
+
+        ClearList();
 
         if (qm == null || journal == null)
         {
@@ -66,13 +108,12 @@ public sealed class QuestUI : MonoBehaviour
             return;
         }
 
-        // Build list source: Active (+ optionally Completed)
         var ids = new List<string>();
         foreach (var id in journal.Active) ids.Add(id);
+
         if (showCompletedInList)
             foreach (var id in journal.Completed) ids.Add(id);
 
-        // If nothing, clear details
         if (ids.Count == 0)
         {
             _selectedQuestId = null;
@@ -80,29 +121,38 @@ public sealed class QuestUI : MonoBehaviour
             return;
         }
 
-        // Keep selection valid
         if (string.IsNullOrEmpty(_selectedQuestId) || !ids.Contains(_selectedQuestId))
             _selectedQuestId = ids[0];
 
-        // Spawn list items
-        for (int i = 0; i < ids.Count; i++)
+        if (listParent != null && listItemPrefab != null)
         {
-            string questId = ids[i];
-            string title = GetQuestTitle(qm, questId);
+            for (int i = 0; i < ids.Count; i++)
+            {
+                string questId = ids[i];
+                string title = GetQuestTitle(qm, questId);
 
-            var item = Instantiate(listItemPrefab, listParent);
-            item.Bind(questId, title, OnQuestClicked);
-            _spawned.Add(item);
+                var item = Instantiate(listItemPrefab, listParent);
+                bool isSelected = questId == _selectedQuestId;
+                item.Bind(questId, title, OnQuestClicked, isSelected);
+                _spawned.Add(item);
+            }
         }
 
-        // Show selected details
         ShowDetails(_selectedQuestId);
     }
 
     private void OnQuestClicked(string questId)
     {
+        if (string.IsNullOrEmpty(questId))
+            return;
+
         _selectedQuestId = questId;
+
         ShowDetails(_selectedQuestId);
+        Refresh();
+
+        if (closeJournalAfterSelection)
+            CloseJournal();
     }
 
     private void ShowDetails(string questId)
@@ -124,7 +174,6 @@ public sealed class QuestUI : MonoBehaviour
 
         var prog = journal.GetOrCreateProgress(questId);
 
-        // Objective text = current step text if active and in range
         string objective = "";
 
         if (journal.IsCompleted(questId))
@@ -170,6 +219,7 @@ public sealed class QuestUI : MonoBehaviour
             if (_spawned[i] != null)
                 Destroy(_spawned[i].gameObject);
         }
+
         _spawned.Clear();
     }
 
@@ -180,14 +230,10 @@ public sealed class QuestUI : MonoBehaviour
         return s.StartsWith(prefix, StringComparison.Ordinal) ? s.Substring(prefix.Length) : s;
     }
 
-    // --- Data access helpers ---
     private bool TryGetQuestDefinition(QuestManager qm, string questId, out QuestDefinition def)
     {
         def = null;
-
-        // QuestManager currently has private database; easiest is to add a tiny helper
-        // If you already added it, use it. Otherwise, we fallback to Resources scan.
-        if (qm.TryGetDefinition(questId, out def)) // <--- you’ll add this method below
+        if (qm.TryGetDefinition(questId, out def))
             return def != null;
 
         return false;
@@ -197,6 +243,7 @@ public sealed class QuestUI : MonoBehaviour
     {
         if (TryGetQuestDefinition(qm, questId, out var def) && def != null)
             return string.IsNullOrEmpty(def.Title) ? questId : def.Title;
+
         return questId;
     }
 }
