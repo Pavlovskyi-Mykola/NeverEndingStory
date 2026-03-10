@@ -117,12 +117,14 @@ public sealed class QuestUI : MonoBehaviour
         if (ids.Count == 0)
         {
             _selectedQuestId = null;
-            SetDetails(null, "No active quests.");
+            SetDetails("", "");
             return;
         }
 
-        if (string.IsNullOrEmpty(_selectedQuestId) || !ids.Contains(_selectedQuestId))
-            _selectedQuestId = ids[0];
+        // If tracked quest is no longer active/completed-visible, stop tracking it.
+        // Do NOT automatically switch to another quest.
+        if (!string.IsNullOrEmpty(_selectedQuestId) && !ids.Contains(_selectedQuestId))
+            _selectedQuestId = null;
 
         if (listParent != null && listItemPrefab != null)
         {
@@ -146,7 +148,11 @@ public sealed class QuestUI : MonoBehaviour
         if (string.IsNullOrEmpty(questId))
             return;
 
-        _selectedQuestId = questId;
+        // Toggle tracking
+        if (_selectedQuestId == questId)
+            _selectedQuestId = null;
+        else
+            _selectedQuestId = questId;
 
         ShowDetails(_selectedQuestId);
         Refresh();
@@ -162,13 +168,13 @@ public sealed class QuestUI : MonoBehaviour
 
         if (qm == null || journal == null || string.IsNullOrEmpty(questId))
         {
-            SetDetails(null, "No quest selected.");
+            SetDetails("", "");
             return;
         }
 
         if (!TryGetQuestDefinition(qm, questId, out var def))
         {
-            SetDetails(questId, "Quest definition missing.");
+            SetDetails("", "");
             return;
         }
 
@@ -189,18 +195,18 @@ public sealed class QuestUI : MonoBehaviour
             }
             else
             {
-                objective = "(Finishing...)";
+                objective = "";
             }
         }
 
         string status =
             journal.IsCompleted(questId) ? "Completed" :
             journal.IsActive(questId) ? "Active" :
-            "Inactive";
+            "";
 
         if (titleText != null) titleText.text = def.Title;
         if (descriptionText != null) descriptionText.text = def.Description;
-        if (objectiveText != null) objectiveText.text = string.IsNullOrEmpty(objective) ? "-" : objective;
+        if (objectiveText != null) objectiveText.text = string.IsNullOrEmpty(objective) ? "" : objective;
         if (statusText != null) statusText.text = status;
     }
 
