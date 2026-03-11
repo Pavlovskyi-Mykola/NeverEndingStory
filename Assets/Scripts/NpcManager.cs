@@ -132,20 +132,6 @@ public class NpcManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// You may need to adjust this depending on how your SceneReference is implemented.
-    /// Common options: compare SceneName, ScenePath, or BuildIndex.
-    /// </summary>
-    private bool SceneReferenceEquals(SceneReference a, SceneReference b)
-    {
-        if (a == null || b == null) return false;
-        if (!a.IsValid || !b.IsValid) return false;
-
-        // ✅ Most SceneReference wrappers expose a SceneName or similar.
-        // If yours uses a different property, change this one line.
-        return a.SceneName == b.SceneName;
-    }
-
     public List<string> GetAllSpeakerIds()
     {
         var result = new List<string> { PlayerSpeakerId };

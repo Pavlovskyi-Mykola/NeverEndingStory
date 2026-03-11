@@ -84,5 +84,9 @@ public class PlayerStatsManager : MonoBehaviour
         return true;
     }
 
-    private void RaiseChanged() => OnStatsChanged?.Invoke();
+    private void RaiseChanged()
+    {
+        OnStatsChanged?.Invoke();
+        GameEvents.RaiseStatsChanged(money, strength, intellect);
+    }
 }

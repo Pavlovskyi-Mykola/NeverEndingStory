@@ -77,7 +77,13 @@ public class GameManager : MonoBehaviour
             await Load(sceneDatabase.MainMenu, setActive: true);
             CurrentLocationRef = sceneDatabase.MainMenu; // ✅ set reference
         }
-        LocationLoadStarted?.Invoke(CurrentLocationRef);
+        // Treat initial active scene as an entered location too.
+        if (CurrentLocationRef != null && CurrentLocationRef.IsValid)
+        {
+            LocationLoadStarted?.Invoke(CurrentLocationRef);
+            LocationReady?.Invoke(CurrentLocationRef);
+            GameEvents.RaiseLocationEntered(CurrentLocationRef.SceneName);
+        }
     }
 
     private void CacheAlreadyLoadedScenes()
@@ -250,6 +256,7 @@ public class GameManager : MonoBehaviour
 
         // ✅ THIS is the key hook NPC system will listen to
         LocationReady?.Invoke(CurrentLocationRef);
+        GameEvents.RaiseLocationEntered(CurrentLocationRef.SceneName);
     }
 
     // ✅ Failsafe: if current location becomes invalid after time skip -> force Home

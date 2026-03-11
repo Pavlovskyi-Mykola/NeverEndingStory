@@ -26,6 +26,21 @@ public struct DialogueTurn
     public List<PresentedChoice> Choices;
 }
 
+public struct DialogueContext
+{
+    public string NpcId;
+    public string LocationId;
+
+    public static DialogueContext From(string npcId, string locationId)
+    {
+        return new DialogueContext
+        {
+            NpcId = npcId,
+            LocationId = locationId
+        };
+    }
+}
+
 public class DialogueRunner : MonoBehaviour
 {
     public static DialogueRunner Instance { get; private set; }
@@ -60,16 +75,33 @@ public class DialogueRunner : MonoBehaviour
     // You can later replace this with NpcManager.PlayerSpeakerId if you want
     private const string PlayerSpeakerId = "Player";
 
+    //QUESTS related
+    public static event Action<DialogueRunner> InstanceReady;
+    //public event Action<string, string> OnDialogueFinished; // (npcId, dialogueId)
+    private DialogueContext _context;
+    private bool _hasContext;
+    //quest new flow
+    public event Action<string> OnTalkedToNpc; // npcId
+
     private void Awake()
     {
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
+        InstanceReady?.Invoke(this);
         DontDestroyOnLoad(gameObject);
     }
 
     public void StartDialogue(DialogueGraph graph)
     {
+        StartDialogue(graph, default);
+    }
+
+    public void StartDialogue(DialogueGraph graph, DialogueContext context)
+    {
         if (graph == null) return;
+
+        _context = context;
+        _hasContext = !string.IsNullOrEmpty(context.NpcId) || !string.IsNullOrEmpty(context.LocationId);
 
         _graph = graph;
         _current = _graph.GetNode(_graph.StartNodeId);
@@ -82,7 +114,7 @@ public class DialogueRunner : MonoBehaviour
         }
 
         // ---- Journal start ----
-        _activeDialogueId = _graph.DialogueId;
+        _activeDialogueId = !string.IsNullOrEmpty(_graph.DialogueId)? _graph.DialogueId: _graph.name; // fallback so quests/journal still work 
         _hasStartedJournal = false;
 
         var journal = DialogueJournal.Instance;
@@ -90,8 +122,6 @@ public class DialogueRunner : MonoBehaviour
         {
             journal.OnDialogueStarted(_activeDialogueId);
             _hasStartedJournal = true;
-
-            // Optional: mark starting node as visited immediately
             journal.GetOrCreateProgress(_activeDialogueId)?.MarkNodeVisited(_current.Id);
         }
 
@@ -112,6 +142,15 @@ public class DialogueRunner : MonoBehaviour
             );
         }
 
+        // Cache before we clear state
+        var finishedDialogueId = _activeDialogueId;
+
+        // quest new flow - Notify systems that a talk with NPC happened
+        if (_hasContext && !string.IsNullOrEmpty(_context.NpcId))
+        {
+            GameEvents.RaiseNpcTalked(_context.NpcId, finishedDialogueId);
+            OnTalkedToNpc?.Invoke(_context.NpcId); // you can remove later if you want
+        }
         _graph = null;
         _current = null;
         _pendingCloseTraversalStartId = null;
@@ -122,6 +161,9 @@ public class DialogueRunner : MonoBehaviour
         IsAdvancing = false;
         _activeDialogueId = null;
         _hasStartedJournal = false;
+        //quest related
+        _context = default;
+        _hasContext = false;
 
         OnDialogueStateChanged?.Invoke(false);
         OnHideDialogue?.Invoke();
