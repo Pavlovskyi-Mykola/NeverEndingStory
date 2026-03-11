@@ -15,6 +15,9 @@ public sealed class QuestDefinition : ScriptableObject
     [Header("Steps (linear)")]
     public List<QuestStepDefinition> Steps = new();
 
+    [Header("Completion Rewards")]
+    public List<QuestRewardDefinition> CompletionRewards = new();
+
     public bool IsValid()
     {
         if (string.IsNullOrEmpty(QuestId)) return false;
@@ -32,7 +35,7 @@ public class QuestStepDefinition
     public QuestStepType Type = QuestStepType.Manual;
 
     [Header("Location (ReachLocation)")]
-    public string TargetLocationSceneName; // set by editor dropdown (no manual typing)
+    public string TargetLocationSceneName;
 
     [Header("Time Restrictions (optional; gates ANY step)")]
     public bool RestrictByDay = false;
@@ -49,5 +52,5 @@ public class QuestStepDefinition
     public int RequiredMoney = 0;
 
     [Header("Dialogue (TalkToNpc)")]
-    public string TargetNpcId;       // required for TalkToNpc
+    public string TargetNpcId;
 }

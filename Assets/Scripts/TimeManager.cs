@@ -3,7 +3,7 @@ using UnityEngine;
 
 public enum TimeOfDay {Morning, Afternoon, Evening, Night}
 
-public enum TimeChangeSource {PlayerUI, Action, Dialogue, System}
+public enum TimeChangeSource {PlayerUI, Action, Dialogue, Quest, System }
 
 public class TimeManager : MonoBehaviour
 {

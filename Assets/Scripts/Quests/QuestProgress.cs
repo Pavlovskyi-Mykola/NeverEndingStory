@@ -12,6 +12,8 @@ public sealed class QuestProgress
     [SerializeField] private int timesCompleted;
     [SerializeField] private string lastUpdatedUtc;
 
+    [SerializeField] private bool completionRewardsGranted;
+
     public string QuestId => questId;
     public int CurrentStepIndex { get => currentStepIndex; set => currentStepIndex = value; }
     public bool ManualStepCompleted { get => manualStepCompleted; set => manualStepCompleted = value; }
@@ -19,6 +21,12 @@ public sealed class QuestProgress
     public int TimesStarted { get => timesStarted; set => timesStarted = value; }
     public int TimesCompleted { get => timesCompleted; set => timesCompleted = value; }
     public string LastUpdatedUtc { get => lastUpdatedUtc; set => lastUpdatedUtc = value; }
+
+    public bool CompletionRewardsGranted
+    {
+        get => completionRewardsGranted;
+        set => completionRewardsGranted = value;
+    }
 
     public int LastConsumedTalkToken;
 
@@ -30,6 +38,7 @@ public sealed class QuestProgress
         timesStarted = 0;
         timesCompleted = 0;
         lastUpdatedUtc = DateTime.UtcNow.ToString("O");
+        completionRewardsGranted = false;
     }
 
     public QuestProgress Clone()
@@ -40,7 +49,8 @@ public sealed class QuestProgress
             manualStepCompleted = this.manualStepCompleted,
             timesStarted = this.timesStarted,
             timesCompleted = this.timesCompleted,
-            lastUpdatedUtc = this.lastUpdatedUtc
+            lastUpdatedUtc = this.lastUpdatedUtc,
+            completionRewardsGranted = this.completionRewardsGranted
         };
     }
 }
