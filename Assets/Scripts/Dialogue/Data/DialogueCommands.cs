@@ -8,7 +8,10 @@ public enum DialogueCommandType
     AddStrength,
     AddIntellect,
     AdvanceTimePhase,
-    SetFlag
+    SetFlag,
+    AddItem,
+    RemoveItem,
+    ConsumeItem
 }
 
 [Serializable]
@@ -17,7 +20,7 @@ public class DialogueCommand
     public DialogueCommandType type;
 
     public int intValue;
-    public string stringValue; // flag id
+    public string stringValue; // flag id or item id
     public bool boolValue;     // flag value
 
     public void Execute()
@@ -50,7 +53,23 @@ public class DialogueCommand
                 break;
 
             case DialogueCommandType.SetFlag:
-                WorldFlags.Set(stringValue, boolValue);
+                if (WorldState.Instance != null)
+                    WorldState.Instance.SetFlag(stringValue, boolValue);
+                break;
+
+            case DialogueCommandType.AddItem:
+                if (InventoryManager.Instance != null)
+                    InventoryManager.Instance.AddItem(stringValue, Mathf.Max(1, intValue));
+                break;
+
+            case DialogueCommandType.RemoveItem:
+                if (InventoryManager.Instance != null)
+                    InventoryManager.Instance.RemoveItem(stringValue, Mathf.Max(1, intValue));
+                break;
+
+            case DialogueCommandType.ConsumeItem:
+                if (InventoryManager.Instance != null)
+                    InventoryManager.Instance.TryConsume(stringValue, Mathf.Max(1, intValue));
                 break;
         }
     }
