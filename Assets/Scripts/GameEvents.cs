@@ -62,6 +62,38 @@ public static class GameEvents
         }
     }
 
+
+    // -----------------
+    // Inventory
+    // -----------------
+
+    public readonly struct InventoryChange
+    {
+        public readonly string ItemId;
+        public readonly int OldCount;
+        public readonly int NewCount;
+        public readonly InventoryManager Inventory;
+
+        public InventoryChange(string itemId, int oldCount, int newCount, InventoryManager inventory)
+        {
+            ItemId = itemId;
+            OldCount = oldCount;
+            NewCount = newCount;
+            Inventory = inventory;
+        }
+    }
+
+    public static event Action<InventoryChange> InventoryChanged;
+
+    public static void RaiseInventoryChanged(string itemId, int oldCount, int newCount, InventoryManager inventory)
+    {
+        InventoryChanged?.Invoke(new InventoryChange(itemId, oldCount, newCount, inventory));
+    }
+
+    // -----------------
+    // World flags
+    // -----------------
+
     public static event Action<StatsSnapshot> StatsChanged;
 
     public static void RaiseStatsChanged(int money, int strength, int intellect)
