@@ -105,6 +105,7 @@ public sealed class QuestManager : MonoBehaviour
         if (Journal == null) { Debug.LogWarning("[QuestManager] QuestJournal missing in scene."); return false; }
         if (database == null) { Debug.LogWarning("[QuestManager] QuestDatabase not assigned."); return false; }
 
+
         if (!database.TryGet(questId, out var def) || def == null || !def.IsValid())
         {
             Debug.LogWarning($"[QuestManager] Cannot start quest '{questId}' (missing/invalid definition).");
@@ -119,6 +120,7 @@ public sealed class QuestManager : MonoBehaviour
         var prog = Journal.GetOrCreateProgress(questId);
         prog.CurrentStepIndex = Mathf.Clamp(prog.CurrentStepIndex, 0, def.Steps.Count - 1);
         prog.ManualStepCompleted = false;
+        prog.CompletionRewardsGranted = false;
 
         // Auto-advance any immediately-completable steps
         TryAdvanceQuest(questId);
@@ -145,6 +147,7 @@ public sealed class QuestManager : MonoBehaviour
             var step = GetCurrentStep(def, prog);
             if (step == null)
             {
+                GrantCompletionRewards(def, prog);
                 Journal.MarkCompleted(questId);
                 changed = true;
                 break;
@@ -172,6 +175,7 @@ public sealed class QuestManager : MonoBehaviour
 
             if (prog.CurrentStepIndex >= def.Steps.Count)
             {
+                GrantCompletionRewards(def, prog);
                 Journal.MarkCompleted(questId);
                 changed = true;
                 break;
@@ -359,5 +363,23 @@ public sealed class QuestManager : MonoBehaviour
         def = null;
         if (database == null) return false;
         return database.TryGet(questId, out def) && def != null;
+    }
+    private void GrantCompletionRewards(QuestDefinition def, QuestProgress prog)
+    {
+        if (def == null || prog == null) return;
+        if (prog.CompletionRewardsGranted) return;
+
+        if (def.CompletionRewards != null)
+        {
+            for (int i = 0; i < def.CompletionRewards.Count; i++)
+            {
+                var reward = def.CompletionRewards[i];
+                if (reward == null) continue;
+                reward.Grant();
+            }
+        }
+
+        prog.CompletionRewardsGranted = true;
+        prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
     }
 }
