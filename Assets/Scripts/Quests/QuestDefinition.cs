@@ -53,4 +53,8 @@ public class QuestStepDefinition
 
     [Header("Dialogue (TalkToNpc)")]
     public string TargetNpcId;
+
+    [Header("Inventory (HaveItem)")]
+    public string RequiredItemId;
+    public int RequiredItemCount = 1;
 }

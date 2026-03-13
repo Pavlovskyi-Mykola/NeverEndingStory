@@ -20,13 +20,6 @@ public enum TimeSkipMode
     NextPhase
 }
 
-[Serializable]
-public class ItemAmount
-{
-    public string ItemId;
-    public int Count = 1;
-}
-
 [CreateAssetMenu(fileName = "Action", menuName = "Game/Actions/Action Definition")]
 public class ActionDefinition : ScriptableObject
 {

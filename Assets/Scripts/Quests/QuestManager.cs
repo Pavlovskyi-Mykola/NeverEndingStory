@@ -32,6 +32,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.StatsChanged += HandleStatsChanged;
         GameEvents.NpcTalked += HandleNpcTalked;
         GameEvents.FlagChanged += HandleFlagChanged;
+        GameEvents.InventoryChanged += HandleInventoryChanged;
     }
 
     private void OnDisable()
@@ -41,6 +42,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.StatsChanged -= HandleStatsChanged;
         GameEvents.NpcTalked -= HandleNpcTalked;
         GameEvents.FlagChanged -= HandleFlagChanged;
+        GameEvents.InventoryChanged -= HandleInventoryChanged;
     }
 
     //flags become a first-class quest trigger
@@ -338,6 +340,8 @@ public sealed class QuestManager : MonoBehaviour
                 return !string.IsNullOrEmpty(step.TargetNpcId)
                     && string.Equals(step.TargetNpcId, _lastTalkNpcId, StringComparison.Ordinal)
                     && prog.LastConsumedTalkToken != _talkToken;
+            case QuestStepType.HaveItem:
+                return HasRequiredItem(step);
             default:
                 return false;
         }
@@ -381,5 +385,22 @@ public sealed class QuestManager : MonoBehaviour
 
         prog.CompletionRewardsGranted = true;
         prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
+    }
+
+    // --- QUESTS ---
+    private void HandleInventoryChanged(GameEvents.InventoryChange change)
+    {
+        TryAdvanceAllActive();
+    }
+
+    private bool HasRequiredItem(QuestStepDefinition step)
+    {
+        var inventory = InventoryManager.Instance;
+        if (inventory == null) return false;
+        if (step == null) return false;
+        if (string.IsNullOrWhiteSpace(step.RequiredItemId)) return false;
+
+        int required = Mathf.Max(1, step.RequiredItemCount);
+        return inventory.HasItem(step.RequiredItemId, required);
     }
 }
