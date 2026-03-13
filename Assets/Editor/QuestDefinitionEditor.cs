@@ -70,6 +70,7 @@ public class QuestDefinitionEditor : Editor
             menu.AddItem(new GUIContent("Pay Money"), false, () => AddStep(QuestStepType.PayMoney));
             menu.AddItem(new GUIContent("AutoComplete"), false, () => AddStep(QuestStepType.AutoComplete));
             menu.AddItem(new GUIContent("Talk To NPC"), false, () => AddStep(QuestStepType.TalkToNpc));
+            menu.AddItem(new GUIContent("Have Item"), false, () => AddStep(QuestStepType.HaveItem));
             menu.DropDown(buttonRect);
         };
     }
@@ -132,6 +133,10 @@ public class QuestDefinitionEditor : Editor
                 break;
             case QuestStepType.TalkToNpc:
                 h += EditorGUIUtility.singleLineHeight + Spacing(); // NPC popup row
+                break;
+            case QuestStepType.HaveItem:
+                h += PropHeight(stepEl.FindPropertyRelative("RequiredItem"), includeChildren: true);
+                h += Spacing();
                 break;
         }
 
@@ -210,6 +215,9 @@ public class QuestDefinitionEditor : Editor
                 break;
             case QuestStepType.TalkToNpc:
                 y = DrawTalkToNpcPicker(stepEl, rect.x, y, rect.width);
+                break;
+            case QuestStepType.HaveItem:
+                y = DrawProp(stepEl.FindPropertyRelative("RequiredItem"), rect.x, y, rect.width, includeChildren: true);
                 break;
         }
 
@@ -327,6 +335,26 @@ public class QuestDefinitionEditor : Editor
 
             if (string.IsNullOrEmpty(p.stringValue))
                 return "TalkToNpc: Target NPC is not set.";
+        }
+
+        if (type == QuestStepType.HaveItem)
+        {
+            var itemProp = stepEl.FindPropertyRelative("RequiredItem");
+            if (itemProp == null)
+                return "HaveItem: RequiredItem missing.";
+
+            var itemIdProp = itemProp.FindPropertyRelative("ItemId");
+            var countProp = itemProp.FindPropertyRelative("Count");
+
+            if (itemIdProp == null || itemIdProp.propertyType != SerializedPropertyType.String)
+                return "HaveItem: RequiredItem.ItemId missing or wrong type.";
+
+            if (string.IsNullOrWhiteSpace(itemIdProp.stringValue))
+                return "HaveItem: required item is not set.";
+
+            int count = countProp != null ? countProp.intValue : 0;
+            if (count <= 0)
+                return "HaveItem: item count should be > 0.";
         }
 
         return null;
@@ -462,6 +490,28 @@ public class QuestDefinitionEditor : Editor
                     var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
                     string npc = npcProp != null ? npcProp.stringValue : "";
                     SetAutoText(stepEl, string.IsNullOrEmpty(npc) ? "Talk to <choose npc>" : $"Talk to {npc}");
+                    break;
+                }
+            case QuestStepType.HaveItem:
+                {
+                    var requiredItemProp = stepEl.FindPropertyRelative("RequiredItem");
+                    var itemIdProp = requiredItemProp != null ? requiredItemProp.FindPropertyRelative("ItemId") : null;
+                    var countProp = requiredItemProp != null ? requiredItemProp.FindPropertyRelative("Count") : null;
+
+                    string itemId = itemIdProp != null ? itemIdProp.stringValue : "";
+                    int count = countProp != null ? countProp.intValue : 0;
+                    if (count <= 0) count = 1;
+
+                    string label = string.IsNullOrWhiteSpace(itemId) ? "<choose item>" : itemId;
+
+                    var itemDb = FindItemDatabase();
+                    if (itemDb != null && !string.IsNullOrWhiteSpace(itemId) && itemDb.TryGet(itemId, out var item) && item != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(item.DisplayName))
+                            label = item.DisplayName;
+                    }
+
+                    SetAutoText(stepEl, count > 1 ? $"Have {count}x {label}" : $"Have {label}");
                     break;
                 }
         }
@@ -650,6 +700,18 @@ public class QuestDefinitionEditor : Editor
                 values.Add(id);
             }
         }
+    }
+    private static ItemDatabase FindItemDatabase()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:ItemDatabase");
+        if (guids == null || guids.Length == 0)
+            return null;
+
+        string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        return AssetDatabase.LoadAssetAtPath<ItemDatabase>(path);
     }
 }
 #endif
