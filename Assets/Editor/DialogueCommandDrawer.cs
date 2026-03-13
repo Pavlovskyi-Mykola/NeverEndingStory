@@ -20,6 +20,11 @@ public class DialogueCommandDrawer : PropertyDrawer
             case "SetFlag":
                 return (Line + VSpace) * 3f;
 
+            case "AddItem":
+            case "RemoveItem":
+            case "ConsumeItem":
+                return (Line + VSpace) * 3f;
+
             default:
                 return (Line + VSpace) * 2f;
         }
@@ -28,9 +33,10 @@ public class DialogueCommandDrawer : PropertyDrawer
     public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
     {
         var typeProp = property.FindPropertyRelative("type");
-        var intValueProp = property.FindPropertyRelative("intValue");
-        var stringValueProp = property.FindPropertyRelative("stringValue");
-        var boolValueProp = property.FindPropertyRelative("boolValue");
+        var amountProp = property.FindPropertyRelative("amount");
+        var flagIdProp = property.FindPropertyRelative("flagId");
+        var flagValueProp = property.FindPropertyRelative("flagValue");
+        var itemIdProp = property.FindPropertyRelative("itemId");
 
         if (typeProp == null)
         {
@@ -53,8 +59,8 @@ public class DialogueCommandDrawer : PropertyDrawer
             case "SpendMoney":
             case "AddStrength":
             case "AddIntellect":
-                if (intValueProp != null)
-                    EditorGUI.PropertyField(row, intValueProp, new GUIContent("Amount"));
+                if (amountProp != null)
+                    EditorGUI.PropertyField(row, amountProp, new GUIContent("Amount"));
                 break;
 
             case "AdvanceTimePhase":
@@ -62,13 +68,25 @@ public class DialogueCommandDrawer : PropertyDrawer
                 break;
 
             case "SetFlag":
-                if (stringValueProp != null)
-                    WorldFlagEditorUtility.DrawFlagField(row, stringValueProp, new GUIContent("Flag Id"));
+                if (flagIdProp != null)
+                    WorldFlagEditorUtility.DrawFlagField(row, flagIdProp, new GUIContent("Flag Id"));
 
                 row.y += Line + VSpace;
 
-                if (boolValueProp != null)
-                    EditorGUI.PropertyField(row, boolValueProp, new GUIContent("Value"));
+                if (flagValueProp != null)
+                    EditorGUI.PropertyField(row, flagValueProp, new GUIContent("Value"));
+                break;
+
+            case "AddItem":
+            case "RemoveItem":
+            case "ConsumeItem":
+                if (itemIdProp != null)
+                    EditorGUI.PropertyField(row, itemIdProp, new GUIContent("Item"));
+
+                row.y += Line + VSpace;
+
+                if (amountProp != null)
+                    EditorGUI.PropertyField(row, amountProp, new GUIContent("Count"));
                 break;
 
             default:
