@@ -109,7 +109,7 @@ public class SceneDatabase : ScriptableObject
         if (!TryGetLocation(sceneRef, out var entry))
             return true;
 
-        return entry.CanEnter(day, phase, inventory);
+        return entry.CanEnterLocation(day, phase, inventory);
     }
 }
 
@@ -163,7 +163,7 @@ public struct LocationEntry
         return true;
     }
 
-    public bool CanEnter(DayOfWeek day, TimeOfDay phase, InventoryManager inventory)
+    public bool CanEnterLocation(DayOfWeek day, TimeOfDay phase, InventoryManager inventory)
     {
         return IsAllowed(day, phase) && HasRequiredItems(inventory);
     }

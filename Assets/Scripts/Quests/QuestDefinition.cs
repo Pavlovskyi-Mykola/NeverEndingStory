@@ -55,6 +55,5 @@ public class QuestStepDefinition
     public string TargetNpcId;
 
     [Header("Inventory (HaveItem)")]
-    public string RequiredItemId;
-    public int RequiredItemCount = 1;
+    public ItemAmount RequiredItem;
 }

@@ -18,10 +18,12 @@ public class DialogueCondition
 {
     public DialogueConditionType type;
 
-    // Generic fields
     public int intValue;
     public TimeOfDay timeOfDayValue;
-    public string stringValue; // flag id or item id
+
+    public string flagId;
+
+    [ItemId] public string itemId;
 }
 
 [Serializable]
@@ -63,15 +65,15 @@ public class DialogueConditionGroup
 
             case DialogueConditionType.FlagIsTrue:
                 return WorldState.Instance != null &&
-                       WorldState.Instance.HasFlag(c.stringValue);
+                       WorldState.Instance.HasFlag(c.flagId);
 
             case DialogueConditionType.HasItem:
                 return InventoryManager.Instance != null &&
-                       InventoryManager.Instance.HasItem(c.stringValue);
+                       InventoryManager.Instance.HasItem(c.itemId);
 
             case DialogueConditionType.ItemCountAtLeast:
                 return InventoryManager.Instance != null &&
-                       InventoryManager.Instance.GetCount(c.stringValue) >= c.intValue;
+                       InventoryManager.Instance.GetCount(c.itemId) >= c.intValue;
 
             default:
                 return true;

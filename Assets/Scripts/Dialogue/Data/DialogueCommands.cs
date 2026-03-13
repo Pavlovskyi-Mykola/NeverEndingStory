@@ -20,8 +20,10 @@ public class DialogueCommand
     public DialogueCommandType type;
 
     public int intValue;
-    public string stringValue; // flag id or item id
     public bool boolValue;     // flag value
+    public string flagId;
+
+    [ItemId] public string itemId;
 
     public void Execute()
     {
@@ -54,22 +56,22 @@ public class DialogueCommand
 
             case DialogueCommandType.SetFlag:
                 if (WorldState.Instance != null)
-                    WorldState.Instance.SetFlag(stringValue, boolValue);
+                    WorldState.Instance.SetFlag(flagId, boolValue);
                 break;
 
             case DialogueCommandType.AddItem:
                 if (InventoryManager.Instance != null)
-                    InventoryManager.Instance.AddItem(stringValue, Mathf.Max(1, intValue));
+                    InventoryManager.Instance.AddItem(itemId, Mathf.Max(1, intValue));
                 break;
 
             case DialogueCommandType.RemoveItem:
                 if (InventoryManager.Instance != null)
-                    InventoryManager.Instance.RemoveItem(stringValue, Mathf.Max(1, intValue));
+                    InventoryManager.Instance.RemoveItem(itemId, Mathf.Max(1, intValue));
                 break;
 
             case DialogueCommandType.ConsumeItem:
                 if (InventoryManager.Instance != null)
-                    InventoryManager.Instance.TryConsume(stringValue, Mathf.Max(1, intValue));
+                    InventoryManager.Instance.TryConsume(itemId, Mathf.Max(1, intValue));
                 break;
         }
     }

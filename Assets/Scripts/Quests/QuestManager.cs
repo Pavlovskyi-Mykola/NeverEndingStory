@@ -392,15 +392,15 @@ public sealed class QuestManager : MonoBehaviour
     {
         TryAdvanceAllActive();
     }
-
     private bool HasRequiredItem(QuestStepDefinition step)
     {
         var inventory = InventoryManager.Instance;
         if (inventory == null) return false;
         if (step == null) return false;
-        if (string.IsNullOrWhiteSpace(step.RequiredItemId)) return false;
+        if (step.RequiredItem == null) return false;
+        if (string.IsNullOrWhiteSpace(step.RequiredItem.ItemId)) return false;
 
-        int required = Mathf.Max(1, step.RequiredItemCount);
-        return inventory.HasItem(step.RequiredItemId, required);
+        int required = Mathf.Max(1, step.RequiredItem.Count);
+        return inventory.HasItem(step.RequiredItem.ItemId, required);
     }
 }
