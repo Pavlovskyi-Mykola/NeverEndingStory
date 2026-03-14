@@ -27,6 +27,8 @@ public class DialogueCommand
 
     [ItemId] public string itemId;
 
+    public string questId;
+
     public void Execute()
     {
         switch (type)
@@ -75,9 +77,10 @@ public class DialogueCommand
                 if (InventoryManager.Instance != null && !string.IsNullOrWhiteSpace(itemId))
                     InventoryManager.Instance.TryConsume(itemId, Mathf.Max(1, amount));
                 break;
+
             case DialogueCommandType.StartQuest:
-                if (QuestManager.Instance != null)
-                    QuestManager.Instance.StartQuest(flagId);
+                if (QuestManager.Instance != null && !string.IsNullOrWhiteSpace(questId))
+                    QuestManager.Instance.StartQuest(questId);
                 break;
         }
     }
