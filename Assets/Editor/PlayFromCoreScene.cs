@@ -16,7 +16,7 @@ public static class PlayFromCoreScene
         EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
     }
 
-    [MenuItem("Tools/Play From Core Scene/Enabled")]
+    [MenuItem("Game/Play From Core Scene/Enabled")]
     private static void Toggle()
     {
         bool enabled = !EditorPrefs.GetBool(PrefKey, true);
@@ -24,14 +24,14 @@ public static class PlayFromCoreScene
         ApplySetting();
     }
 
-    [MenuItem("Tools/Play From Core Scene/Enabled", true)]
+    [MenuItem("Game/Play From Core Scene/Enabled", true)]
     private static bool ToggleValidate()
     {
-        Menu.SetChecked("Tools/Play From Core Scene/Enabled", EditorPrefs.GetBool(PrefKey, true));
+        Menu.SetChecked("Game/Play From Core Scene/Enabled", EditorPrefs.GetBool(PrefKey, true));
         return true;
     }
 
-    [MenuItem("Tools/Play From Core Scene/Play _F9")]
+    [MenuItem("Game/Play From Core Scene/Play _F9")]
     private static void PlayFromCore()
     {
         var sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(CoreScenePath);
