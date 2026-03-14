@@ -51,6 +51,10 @@ public class QuestStepDefinition
     [Header("Money (HaveMoney / PayMoney)")]
     public int RequiredMoney = 0;
 
-    [Header("Dialogue (TalkToNpc)")]
+    [Header("Dialogue (TalkToDialogue)")]
     public string TargetNpcId;
+    public string TargetDialogueId;
+
+    [Header("Inventory (HaveItem)")]
+    public ItemAmount RequiredItem;
 }

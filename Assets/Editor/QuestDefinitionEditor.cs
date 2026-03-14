@@ -69,7 +69,8 @@ public class QuestDefinitionEditor : Editor
             menu.AddItem(new GUIContent("Require Money"), false, () => AddStep(QuestStepType.HaveMoney));
             menu.AddItem(new GUIContent("Pay Money"), false, () => AddStep(QuestStepType.PayMoney));
             menu.AddItem(new GUIContent("AutoComplete"), false, () => AddStep(QuestStepType.AutoComplete));
-            menu.AddItem(new GUIContent("Talk To NPC"), false, () => AddStep(QuestStepType.TalkToNpc));
+            menu.AddItem(new GUIContent("Talk To Dialogue"), false, () => AddStep(QuestStepType.TalkToDialogue));
+            menu.AddItem(new GUIContent("Have Item"), false, () => AddStep(QuestStepType.HaveItem));
             menu.DropDown(buttonRect);
         };
     }
@@ -130,8 +131,13 @@ public class QuestDefinitionEditor : Editor
                 h += PropHeight(stepEl.FindPropertyRelative("RequiredMoney"));
                 h += Spacing();
                 break;
-            case QuestStepType.TalkToNpc:
-                h += EditorGUIUtility.singleLineHeight + Spacing(); // NPC popup row
+            case QuestStepType.TalkToDialogue:
+                h += EditorGUIUtility.singleLineHeight + Spacing(); // NPC popup
+                h += EditorGUIUtility.singleLineHeight + Spacing(); // Dialogue popup
+                break;
+            case QuestStepType.HaveItem:
+                h += PropHeight(stepEl.FindPropertyRelative("RequiredItem"), includeChildren: true);
+                h += Spacing();
                 break;
         }
 
@@ -208,8 +214,11 @@ public class QuestDefinitionEditor : Editor
             case QuestStepType.PayMoney:
                 y = DrawProp(stepEl.FindPropertyRelative("RequiredMoney"), rect.x, y, rect.width);
                 break;
-            case QuestStepType.TalkToNpc:
-                y = DrawTalkToNpcPicker(stepEl, rect.x, y, rect.width);
+            case QuestStepType.TalkToDialogue:
+                y = DrawTalkToDialoguePickers(stepEl, rect.x, y, rect.width);
+                break;
+            case QuestStepType.HaveItem:
+                y = DrawProp(stepEl.FindPropertyRelative("RequiredItem"), rect.x, y, rect.width, includeChildren: true);
                 break;
         }
 
@@ -319,14 +328,42 @@ public class QuestDefinitionEditor : Editor
             if (phases == 0) return "RestrictByPhase is enabled but AllowedPhases is empty.";
         }
 
-        if (type == QuestStepType.TalkToNpc)
+        if (type == QuestStepType.TalkToDialogue)
         {
-            var p = stepEl.FindPropertyRelative("TargetNpcId");
-            if (p == null || p.propertyType != SerializedPropertyType.String)
-                return "TalkToNpc: TargetNpcId missing or wrong type.";
+            var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+            var dialogueProp = stepEl.FindPropertyRelative("TargetDialogueId");
 
-            if (string.IsNullOrEmpty(p.stringValue))
-                return "TalkToNpc: Target NPC is not set.";
+            if (npcProp == null || npcProp.propertyType != SerializedPropertyType.String)
+                return "TalkToDialogue: TargetNpcId missing or wrong type.";
+
+            if (dialogueProp == null || dialogueProp.propertyType != SerializedPropertyType.String)
+                return "TalkToDialogue: TargetDialogueId missing or wrong type.";
+
+            if (string.IsNullOrEmpty(npcProp.stringValue))
+                return "TalkToDialogue: Target NPC is not set.";
+
+            if (string.IsNullOrEmpty(dialogueProp.stringValue))
+                return "TalkToDialogue: Target Dialogue is not set.";
+        }
+
+        if (type == QuestStepType.HaveItem)
+        {
+            var itemProp = stepEl.FindPropertyRelative("RequiredItem");
+            if (itemProp == null)
+                return "HaveItem: RequiredItem missing.";
+
+            var itemIdProp = itemProp.FindPropertyRelative("ItemId");
+            var countProp = itemProp.FindPropertyRelative("Count");
+
+            if (itemIdProp == null || itemIdProp.propertyType != SerializedPropertyType.String)
+                return "HaveItem: RequiredItem.ItemId missing or wrong type.";
+
+            if (string.IsNullOrWhiteSpace(itemIdProp.stringValue))
+                return "HaveItem: required item is not set.";
+
+            int count = countProp != null ? countProp.intValue : 0;
+            if (count <= 0)
+                return "HaveItem: item count should be > 0.";
         }
 
         return null;
@@ -457,11 +494,42 @@ public class QuestDefinitionEditor : Editor
             case QuestStepType.AutoComplete:
                 SetAutoText(stepEl, "Progress");
                 break;
-            case QuestStepType.TalkToNpc:
+            case QuestStepType.TalkToDialogue:
                 {
                     var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+                    var dialogueProp = stepEl.FindPropertyRelative("TargetDialogueId");
+
                     string npc = npcProp != null ? npcProp.stringValue : "";
-                    SetAutoText(stepEl, string.IsNullOrEmpty(npc) ? "Talk to <choose npc>" : $"Talk to {npc}");
+                    string dialogueId = dialogueProp != null ? dialogueProp.stringValue : "";
+
+                    if (string.IsNullOrEmpty(npc) && string.IsNullOrEmpty(dialogueId))
+                        SetAutoText(stepEl, "Talk to <choose dialogue>");
+                    else if (string.IsNullOrEmpty(dialogueId))
+                        SetAutoText(stepEl, $"Talk to {npc}");
+                    else
+                        SetAutoText(stepEl, $"Talk to {npc} ({dialogueId})");
+                    break;
+                }
+            case QuestStepType.HaveItem:
+                {
+                    var requiredItemProp = stepEl.FindPropertyRelative("RequiredItem");
+                    var itemIdProp = requiredItemProp != null ? requiredItemProp.FindPropertyRelative("ItemId") : null;
+                    var countProp = requiredItemProp != null ? requiredItemProp.FindPropertyRelative("Count") : null;
+
+                    string itemId = itemIdProp != null ? itemIdProp.stringValue : "";
+                    int count = countProp != null ? countProp.intValue : 0;
+                    if (count <= 0) count = 1;
+
+                    string label = string.IsNullOrWhiteSpace(itemId) ? "<choose item>" : itemId;
+
+                    var itemDb = FindItemDatabase();
+                    if (itemDb != null && !string.IsNullOrWhiteSpace(itemId) && itemDb.TryGet(itemId, out var item) && item != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(item.DisplayName))
+                            label = item.DisplayName;
+                    }
+
+                    SetAutoText(stepEl, count > 1 ? $"Have {count}x {label}" : $"Have {label}");
                     break;
                 }
         }
@@ -650,6 +718,175 @@ public class QuestDefinitionEditor : Editor
                 values.Add(id);
             }
         }
+    }
+    private static ItemDatabase FindItemDatabase()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:ItemDatabase");
+        if (guids == null || guids.Length == 0)
+            return null;
+
+        string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        return AssetDatabase.LoadAssetAtPath<ItemDatabase>(path);
+    }
+    private static float DrawTalkToDialoguePickers(SerializedProperty stepEl, float x, float y, float width)
+    {
+        var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+        var dialogueProp = stepEl.FindPropertyRelative("TargetDialogueId");
+
+        string oldNpcId = npcProp != null ? npcProp.stringValue : "";
+
+        y = DrawTalkToNpcPicker(stepEl, x, y, width);
+
+        string newNpcId = npcProp != null ? npcProp.stringValue : "";
+
+        // If NPC changed, clear selected dialogue because the filtered list changed
+        if (!string.Equals(oldNpcId, newNpcId, StringComparison.Ordinal))
+        {
+            if (dialogueProp != null)
+                dialogueProp.stringValue = "";
+
+            RefreshAutoTextForStep(stepEl);
+        }
+
+        y = DrawDialoguePicker(stepEl, x, y, width);
+        return y;
+    }
+
+    private static float DrawDialoguePicker(SerializedProperty stepEl, float x, float y, float width)
+    {
+        var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+        var dialogueProp = stepEl.FindPropertyRelative("TargetDialogueId");
+
+        if (dialogueProp == null || dialogueProp.propertyType != SerializedPropertyType.String)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                "TalkToDialogue: TargetDialogueId missing or not a string. Check QuestStepDefinition.",
+                MessageType.Error);
+            return y + 40 + Spacing();
+        }
+
+        string selectedNpcId = npcProp != null ? npcProp.stringValue : "";
+
+        if (string.IsNullOrWhiteSpace(selectedNpcId))
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                "Select Target NPC first.",
+                MessageType.Info);
+            return y + 40 + Spacing();
+        }
+
+        BuildDialogueOptions(selectedNpcId, out var labels, out var values);
+
+        if (values.Count <= 1)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                $"No dialogues found in Routes for NPC '{selectedNpcId}'. Add them to that NPC's RouteSet first.",
+                MessageType.Warning);
+            return y + 40 + Spacing();
+        }
+
+        string cur = dialogueProp.stringValue ?? "";
+        int curIndex = 0;
+        for (int i = 0; i < values.Count; i++)
+        {
+            if (string.Equals(values[i], cur, StringComparison.Ordinal))
+            {
+                curIndex = i;
+                break;
+            }
+        }
+
+        var r = new Rect(x, y, width, EditorGUIUtility.singleLineHeight);
+
+        EditorGUI.BeginChangeCheck();
+        int newIndex = EditorGUI.Popup(r, "Target Dialogue", curIndex, labels.ToArray());
+        if (EditorGUI.EndChangeCheck())
+        {
+            dialogueProp.stringValue = values[Mathf.Clamp(newIndex, 0, values.Count - 1)];
+            RefreshAutoTextForStep(stepEl);
+        }
+
+        return y + EditorGUIUtility.singleLineHeight + Spacing();
+    }
+
+    private static void BuildDialogueOptions(string npcId, out List<string> labels, out List<string> values)
+    {
+        labels = new List<string>();
+        values = new List<string>();
+
+        labels.Add("<None>");
+        values.Add("");
+
+        var npc = FindNpcDefinitionById(npcId);
+        if (npc == null || npc.Routes == null)
+            return;
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        AddGraph(npc.Routes.fallback, labels, values, seen);
+
+        if (npc.Routes.rules != null)
+        {
+            for (int i = 0; i < npc.Routes.rules.Count; i++)
+            {
+                var rule = npc.Routes.rules[i];
+                if (rule == null) continue;
+
+                AddGraph(rule.graph, labels, values, seen);
+
+                if (rule.pool != null)
+                {
+                    for (int j = 0; j < rule.pool.Length; j++)
+                        AddGraph(rule.pool[j], labels, values, seen);
+                }
+
+                AddGraph(rule.requireNotSeenThis, labels, values, seen);
+                AddGraph(rule.requireSeenThis, labels, values, seen);
+            }
+        }
+    }
+    private static NpcDefinition FindNpcDefinitionById(string npcId)
+    {
+        if (string.IsNullOrWhiteSpace(npcId))
+            return null;
+
+        string[] guids = AssetDatabase.FindAssets("t:NpcDefinition");
+        for (int i = 0; i < guids.Length; i++)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+            var npc = AssetDatabase.LoadAssetAtPath<NpcDefinition>(path);
+            if (npc == null) continue;
+
+            if (string.Equals(npc.NpcId, npcId, StringComparison.Ordinal))
+                return npc;
+        }
+
+        return null;
+    }
+    private static void AddGraph(
+    DialogueGraph graph,
+    List<string> labels,
+    List<string> values,
+    HashSet<string> seen)
+    {
+        if (graph == null)
+            return;
+
+        string id = !string.IsNullOrWhiteSpace(graph.DialogueId)
+            ? graph.DialogueId
+            : graph.name;
+
+        if (string.IsNullOrWhiteSpace(id))
+            return;
+
+        if (!seen.Add(id))
+            return;
+
+        labels.Add($"{id} ({graph.name})");
+        values.Add(id);
     }
 }
 #endif

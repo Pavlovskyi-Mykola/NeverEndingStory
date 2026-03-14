@@ -8,7 +8,9 @@ public enum DialogueConditionType
     StrengthAtLeast,
     IntellectAtLeast,
     TimeOfDayIs,
-    FlagIsTrue
+    FlagIsTrue,
+    HasItem,
+    ItemCountAtLeast
 }
 
 [Serializable]
@@ -16,16 +18,17 @@ public class DialogueCondition
 {
     public DialogueConditionType type;
 
-    // Generic fields to keep it simple
     public int intValue;
     public TimeOfDay timeOfDayValue;
-    public string stringValue; // flag id
+
+    public string flagId;
+
+    [ItemId] public string itemId;
 }
 
 [Serializable]
 public class DialogueConditionGroup
 {
-    // AND group: all must be true
     [SerializeField] private List<DialogueCondition> all = new();
 
     public IReadOnlyList<DialogueCondition> All => all;
@@ -45,19 +48,32 @@ public class DialogueConditionGroup
         switch (c.type)
         {
             case DialogueConditionType.MoneyAtLeast:
-                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Money >= c.intValue;
+                return PlayerStatsManager.Instance != null &&
+                       PlayerStatsManager.Instance.Money >= c.intValue;
 
             case DialogueConditionType.StrengthAtLeast:
-                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Strength >= c.intValue;
+                return PlayerStatsManager.Instance != null &&
+                       PlayerStatsManager.Instance.Strength >= c.intValue;
 
             case DialogueConditionType.IntellectAtLeast:
-                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Intellect >= c.intValue;
+                return PlayerStatsManager.Instance != null &&
+                       PlayerStatsManager.Instance.Intellect >= c.intValue;
 
             case DialogueConditionType.TimeOfDayIs:
-                return TimeManager.Instance != null && TimeManager.Instance.TimeOfDay == c.timeOfDayValue;
+                return TimeManager.Instance != null &&
+                       TimeManager.Instance.TimeOfDay == c.timeOfDayValue;
 
-            //case DialogueConditionType.FlagIsTrue:
-            //    return FlagsManager.Instance != null && FlagsManager.Instance.GetFlag(c.stringValue);
+            case DialogueConditionType.FlagIsTrue:
+                return WorldState.Instance != null &&
+                       WorldState.Instance.HasFlag(c.flagId);
+
+            case DialogueConditionType.HasItem:
+                return InventoryManager.Instance != null &&
+                       InventoryManager.Instance.HasItem(c.itemId);
+
+            case DialogueConditionType.ItemCountAtLeast:
+                return InventoryManager.Instance != null &&
+                       InventoryManager.Instance.GetCount(c.itemId) >= c.intValue;
 
             default:
                 return true;

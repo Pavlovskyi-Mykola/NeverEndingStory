@@ -5,67 +5,84 @@ public static class DialogueSelector
 {
     public static DialogueGraph Select(DialogueRouteSet routes, DialogueSelectorContext ctx)
     {
-        if (routes == null) return null;
+        if (routes == null)
+            return null;
 
-        var journal = DialogueJournal.Instance;
-
-        for (int i = 0; i < routes.rules.Count; i++)
+        if (routes.rules != null)
         {
-            var rule = routes.rules[i];
-            if (rule == null) continue;
-            if (!rule.IsEligible(ctx, journal)) continue;
-
-            switch (rule.kind)
+            for (int i = 0; i < routes.rules.Count; i++)
             {
-                case DialogueRuleKind.IntroIfNotSeen:
-                    {
-                        if (rule.graph == null) break;
-                        if (journal != null && journal.HasSeenDialogue(rule.graph.DialogueId)) break;
-                        return rule.graph;
-                    }
+                var rule = routes.rules[i];
+                if (rule == null)
+                    continue;
 
-                case DialogueRuleKind.SpecialIfCondition:
-                    {
-                        if (rule.graph == null) break;
-                        return rule.graph;
-                    }
+                if (!rule.IsEligible(ctx))
+                    continue;
 
-                case DialogueRuleKind.RepeatablePool:
-                    {
-                        var chosen = PickFromPool(rule, journal);
-                        if (chosen != null) return chosen;
-                        break;
-                    }
+                var result = ResolveRule(rule, ctx);
+                if (result != null)
+                    return result;
             }
         }
 
         return routes.fallback;
     }
 
-    private static DialogueGraph PickFromPool(DialogueSelectorRule rule, DialogueJournal journal)
+    private static DialogueGraph ResolveRule(DialogueSelectorRule rule, DialogueSelectorContext ctx)
     {
-        if (rule.pool == null || rule.pool.Length == 0) return null;
+        switch (rule.kind)
+        {
+            case DialogueRuleKind.IntroIfNotSeen:
+                return ResolveIntro(rule);
 
-        // Build list of eligible graphs (optionally excluding seen, etc.)
+            case DialogueRuleKind.SpecialIfCondition:
+                return rule.graph;
+
+            case DialogueRuleKind.RepeatablePool:
+                return PickFromPool(rule, ctx);
+
+            default:
+                return null;
+        }
+    }
+
+    private static DialogueGraph ResolveIntro(DialogueSelectorRule rule)
+    {
+        if (rule.graph == null)
+            return null;
+
+        var journal = DialogueJournal.Instance;
+        if (journal != null && journal.HasSeenDialogue(rule.graph.DialogueId))
+            return null;
+
+        return rule.graph;
+    }
+
+    private static DialogueGraph PickFromPool(DialogueSelectorRule rule, DialogueSelectorContext ctx)
+    {
+        if (rule.pool == null || rule.pool.Length == 0)
+            return null;
+
         var candidates = new List<DialogueGraph>(rule.pool.Length);
+
         for (int i = 0; i < rule.pool.Length; i++)
         {
-            var g = rule.pool[i];
-            if (g == null) continue;
-
-            // Optional: if "requireNotSeenDialogue" used with pools, treat it as "exclude seen"
-            if (rule.requireNotSeenDialogue && journal != null && journal.HasSeenDialogue(g.DialogueId))
+            var graph = rule.pool[i];
+            if (graph == null)
                 continue;
 
-            candidates.Add(g);
+            if (!rule.IsPoolGraphEligible(graph, ctx))
+                continue;
+
+            candidates.Add(graph);
         }
 
-        if (candidates.Count == 0) return null;
+        if (candidates.Count == 0)
+            return null;
 
         if (rule.pickMode == DialoguePickMode.FirstValid)
             return candidates[0];
 
-        // Random
         return candidates[Random.Range(0, candidates.Count)];
     }
 }

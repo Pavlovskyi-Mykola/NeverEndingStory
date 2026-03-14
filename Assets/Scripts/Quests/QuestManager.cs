@@ -13,6 +13,7 @@ public sealed class QuestManager : MonoBehaviour
 
     private int _talkToken = 0;
     private string _lastTalkNpcId = null;
+    private string _lastTalkDialogueId = null;
 
     private QuestJournal Journal => QuestJournal.Instance;
 
@@ -32,6 +33,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.StatsChanged += HandleStatsChanged;
         GameEvents.NpcTalked += HandleNpcTalked;
         GameEvents.FlagChanged += HandleFlagChanged;
+        GameEvents.InventoryChanged += HandleInventoryChanged;
     }
 
     private void OnDisable()
@@ -41,6 +43,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.StatsChanged -= HandleStatsChanged;
         GameEvents.NpcTalked -= HandleNpcTalked;
         GameEvents.FlagChanged -= HandleFlagChanged;
+        GameEvents.InventoryChanged -= HandleInventoryChanged;
     }
 
     //flags become a first-class quest trigger
@@ -51,10 +54,12 @@ public sealed class QuestManager : MonoBehaviour
 
     private void HandleNpcTalked(string npcId, string dialogueId)
     {
-        if (string.IsNullOrEmpty(npcId)) return;
+        if (string.IsNullOrEmpty(npcId) && string.IsNullOrEmpty(dialogueId))
+            return;
 
         _talkToken++;
         _lastTalkNpcId = npcId;
+        _lastTalkDialogueId = dialogueId;
 
         TryAdvanceAllActive();
     }
@@ -80,7 +85,6 @@ public sealed class QuestManager : MonoBehaviour
 
         bool changed = false;
 
-        // Snapshot to avoid “collection modified” when quests complete
         var snapshot = new System.Collections.Generic.List<string>(Journal.Active);
 
         for (int i = 0; i < snapshot.Count; i++)
@@ -95,16 +99,11 @@ public sealed class QuestManager : MonoBehaviour
             OnQuestStateChanged?.Invoke();
     }
 
-    // -----------------------
-    // Public API
-    // -----------------------
-
     public bool StartQuest(string questId)
     {
         if (string.IsNullOrEmpty(questId)) return false;
         if (Journal == null) { Debug.LogWarning("[QuestManager] QuestJournal missing in scene."); return false; }
         if (database == null) { Debug.LogWarning("[QuestManager] QuestDatabase not assigned."); return false; }
-
 
         if (!database.TryGet(questId, out var def) || def == null || !def.IsValid())
         {
@@ -115,6 +114,9 @@ public sealed class QuestManager : MonoBehaviour
         if (Journal.IsCompleted(questId))
             return false;
 
+        if (Journal.IsActive(questId))
+            return false;
+
         Journal.MarkStarted(questId);
 
         var prog = Journal.GetOrCreateProgress(questId);
@@ -122,7 +124,6 @@ public sealed class QuestManager : MonoBehaviour
         prog.ManualStepCompleted = false;
         prog.CompletionRewardsGranted = false;
 
-        // Auto-advance any immediately-completable steps
         TryAdvanceQuest(questId);
 
         OnQuestStateChanged?.Invoke();
@@ -144,6 +145,7 @@ public sealed class QuestManager : MonoBehaviour
                 changed = true;
                 break;
             }
+
             var step = GetCurrentStep(def, prog);
             if (step == null)
             {
@@ -153,21 +155,18 @@ public sealed class QuestManager : MonoBehaviour
                 break;
             }
 
-            // Global time/phase constraints apply to any step
             if (!MeetsTimeConstraints(step))
                 break;
 
             if (!IsStepComplete(step, prog))
                 break;
 
-            // Apply completion side effects (PayMoney, etc.)
             if (!ApplyStepCompletionEffects(step))
                 break;
 
-            // Consume talk event so it won’t complete multiple quests/steps unintentionally
-            if (step.Type == QuestStepType.TalkToNpc)
+            if (step.Type == QuestStepType.TalkToDialogue)
                 prog.LastConsumedTalkToken = _talkToken;
-            // Consume step -> next
+
             prog.CurrentStepIndex++;
             prog.ManualStepCompleted = false;
             prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
@@ -188,10 +187,6 @@ public sealed class QuestManager : MonoBehaviour
         return changed;
     }
 
-    // -----------------------
-    // Internals
-    // -----------------------
-
     private bool TryGetDefAndProg(string questId, out QuestDefinition def, out QuestProgress prog)
     {
         def = null;
@@ -207,8 +202,6 @@ public sealed class QuestManager : MonoBehaviour
         prog = Journal.GetOrCreateProgress(questId);
         if (prog == null) return false;
 
-        // Only guard against negative; DO NOT clamp upper bound.
-        // We need to allow ">= Steps.Count" to mean "completed".
         if (prog.CurrentStepIndex < 0) prog.CurrentStepIndex = 0;
         return true;
     }
@@ -219,6 +212,7 @@ public sealed class QuestManager : MonoBehaviour
         if (prog.CurrentStepIndex < 0 || prog.CurrentStepIndex >= def.Steps.Count) return null;
         return def.Steps[prog.CurrentStepIndex];
     }
+
     private bool MeetsTimeConstraints(QuestStepDefinition step)
     {
         if (step == null) return true;
@@ -226,7 +220,6 @@ public sealed class QuestManager : MonoBehaviour
         var tm = TimeManager.Instance;
         if (tm == null) return true;
 
-        // ---- Day check ----
         if (step.RestrictByDay)
         {
             if (step.AllowedDays == DayOfWeekMask.None)
@@ -238,7 +231,6 @@ public sealed class QuestManager : MonoBehaviour
                 return false;
         }
 
-        // ---- Phase check ----
         if (step.RestrictByPhase)
         {
             if (step.AllowedPhases == DayPhaseMask.None)
@@ -249,6 +241,7 @@ public sealed class QuestManager : MonoBehaviour
             if ((step.AllowedPhases & currentMask) == 0)
                 return false;
         }
+
         return true;
     }
 
@@ -308,7 +301,6 @@ public sealed class QuestManager : MonoBehaviour
         return stats.TrySpendMoney(cost);
     }
 
-
     private bool IsStepComplete(QuestStepDefinition step, QuestProgress prog)
     {
         if (step == null || prog == null) return false;
@@ -331,13 +323,25 @@ public sealed class QuestManager : MonoBehaviour
                 return HasMoney(step);
 
             case QuestStepType.PayMoney:
-                // "Complete" means "can pay now" (payment happens in ApplyStepCompletionEffects)
                 return CanPay(step);
-            //Since we’re completing it directly in the handler, technically don’t need this. for clarity makes it explicit.
-            case QuestStepType.TalkToNpc:
-                return !string.IsNullOrEmpty(step.TargetNpcId)
-                    && string.Equals(step.TargetNpcId, _lastTalkNpcId, StringComparison.Ordinal)
-                    && prog.LastConsumedTalkToken != _talkToken;
+            case QuestStepType.HaveItem:
+                return HasRequiredItem(step);
+
+            case QuestStepType.TalkToDialogue:
+                {
+                    if (prog.LastConsumedTalkToken == _talkToken)
+                        return false;
+
+                    if (!string.IsNullOrEmpty(step.TargetNpcId) &&
+                        !string.Equals(step.TargetNpcId, _lastTalkNpcId, StringComparison.Ordinal))
+                        return false;
+
+                    if (string.IsNullOrEmpty(step.TargetDialogueId))
+                        return false;
+
+                    return string.Equals(step.TargetDialogueId, _lastTalkDialogueId, StringComparison.Ordinal);
+                }
+
             default:
                 return false;
         }
@@ -381,5 +385,22 @@ public sealed class QuestManager : MonoBehaviour
 
         prog.CompletionRewardsGranted = true;
         prog.LastUpdatedUtc = DateTime.UtcNow.ToString("O");
+    }
+
+    // --- QUESTS ---
+    private void HandleInventoryChanged(GameEvents.InventoryChange change)
+    {
+        TryAdvanceAllActive();
+    }
+    private bool HasRequiredItem(QuestStepDefinition step)
+    {
+        var inventory = InventoryManager.Instance;
+        if (inventory == null) return false;
+        if (step == null) return false;
+        if (step.RequiredItem == null) return false;
+        if (string.IsNullOrWhiteSpace(step.RequiredItem.ItemId)) return false;
+
+        int required = Mathf.Max(1, step.RequiredItem.Count);
+        return inventory.HasItem(step.RequiredItem.ItemId, required);
     }
 }

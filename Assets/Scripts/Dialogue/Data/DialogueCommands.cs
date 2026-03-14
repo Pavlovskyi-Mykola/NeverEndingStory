@@ -8,7 +8,11 @@ public enum DialogueCommandType
     AddStrength,
     AddIntellect,
     AdvanceTimePhase,
-    SetFlag
+    SetFlag,
+    AddItem,
+    RemoveItem,
+    ConsumeItem,
+    StartQuest
 }
 
 [Serializable]
@@ -16,9 +20,14 @@ public class DialogueCommand
 {
     public DialogueCommandType type;
 
-    public int intValue;
-    public string stringValue; // flag id
-    public bool boolValue;     // flag value
+    public int amount = 1;
+
+    public string flagId;
+    public bool flagValue;
+
+    [ItemId] public string itemId;
+
+    public string questId;
 
     public void Execute()
     {
@@ -26,22 +35,22 @@ public class DialogueCommand
         {
             case DialogueCommandType.AddMoney:
                 if (PlayerStatsManager.Instance != null)
-                    PlayerStatsManager.Instance.AddMoney(intValue);
+                    PlayerStatsManager.Instance.AddMoney(amount);
                 break;
 
             case DialogueCommandType.SpendMoney:
                 if (PlayerStatsManager.Instance != null)
-                    PlayerStatsManager.Instance.TrySpendMoney(intValue);
+                    PlayerStatsManager.Instance.TrySpendMoney(amount);
                 break;
 
             case DialogueCommandType.AddStrength:
                 if (PlayerStatsManager.Instance != null)
-                    PlayerStatsManager.Instance.AddStrength(intValue);
+                    PlayerStatsManager.Instance.AddStrength(amount);
                 break;
 
             case DialogueCommandType.AddIntellect:
                 if (PlayerStatsManager.Instance != null)
-                    PlayerStatsManager.Instance.AddIntellect(intValue);
+                    PlayerStatsManager.Instance.AddIntellect(amount);
                 break;
 
             case DialogueCommandType.AdvanceTimePhase:
@@ -50,7 +59,28 @@ public class DialogueCommand
                 break;
 
             case DialogueCommandType.SetFlag:
-                WorldFlags.Set(stringValue, boolValue);
+                if (WorldState.Instance != null && !string.IsNullOrWhiteSpace(flagId))
+                    WorldState.Instance.SetFlag(flagId, flagValue);
+                break;
+
+            case DialogueCommandType.AddItem:
+                if (InventoryManager.Instance != null && !string.IsNullOrWhiteSpace(itemId))
+                    InventoryManager.Instance.AddItem(itemId, Mathf.Max(1, amount));
+                break;
+
+            case DialogueCommandType.RemoveItem:
+                if (InventoryManager.Instance != null && !string.IsNullOrWhiteSpace(itemId))
+                    InventoryManager.Instance.RemoveItem(itemId, Mathf.Max(1, amount));
+                break;
+
+            case DialogueCommandType.ConsumeItem:
+                if (InventoryManager.Instance != null && !string.IsNullOrWhiteSpace(itemId))
+                    InventoryManager.Instance.TryConsume(itemId, Mathf.Max(1, amount));
+                break;
+
+            case DialogueCommandType.StartQuest:
+                if (QuestManager.Instance != null && !string.IsNullOrWhiteSpace(questId))
+                    QuestManager.Instance.StartQuest(questId);
                 break;
         }
     }

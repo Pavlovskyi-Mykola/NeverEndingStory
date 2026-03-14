@@ -237,10 +237,11 @@ public class GameManager : MonoBehaviour
         {
             var day = TimeManager.Instance.DayOfWeek;
             var phase = TimeManager.Instance.TimeOfDay;
+            var inventory = InventoryManager.Instance;
 
-            if (!sceneDatabase.IsAllowedNow(targetLocation, day, phase))
+            if (!sceneDatabase.CanEnterNow(targetLocation, day, phase, inventory))
             {
-                Debug.Log($"Blocked travel to '{targetLocation.SceneName}' at {day}/{phase}.");
+                Debug.Log($"Blocked travel to '{targetLocation.SceneName}' due to requirements.");
                 return;
             }
         }

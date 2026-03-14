@@ -104,6 +104,13 @@ public class SceneDatabase : ScriptableObject
 
         return entry.IsAllowed(day, phase);
     }
+    public bool CanEnterNow(SceneReference sceneRef, DayOfWeek day, TimeOfDay phase, InventoryManager inventory)
+    {
+        if (!TryGetLocation(sceneRef, out var entry))
+            return true;
+
+        return entry.CanEnterLocation(day, phase, inventory);
+    }
 }
 
 [Serializable]
@@ -115,6 +122,9 @@ public struct LocationEntry
     [Header("Availability (Option A)")]
     public DayPhaseMask AllowedPhases;     // Morning/Afternoon/Evening/Night
     public DayOfWeekMask AllowedDays;      // Mon..Sun
+
+    [Header("Inventory Requirements")]
+    public ItemAmount[] RequiredItems;
 
     // ✅ RESTRICTED BY DEFAULT:
     // - if entry exists but masks are None => location is CLOSED
@@ -128,4 +138,34 @@ public struct LocationEntry
 
         return dayOk && phaseOk;
     }
+
+    public bool HasRequiredItems(InventoryManager inventory)
+    {
+        if (RequiredItems == null || RequiredItems.Length == 0)
+            return true;
+
+        if (inventory == null)
+            return false;
+
+        for (int i = 0; i < RequiredItems.Length; i++)
+        {
+            var req = RequiredItems[i];
+
+            if (req == null || string.IsNullOrWhiteSpace(req.ItemId))
+                continue;
+
+            int count = req.Count <= 0 ? 1 : req.Count;
+
+            if (!inventory.HasItem(req.ItemId, count))
+                return false;
+        }
+
+        return true;
+    }
+
+    public bool CanEnterLocation(DayOfWeek day, TimeOfDay phase, InventoryManager inventory)
+    {
+        return IsAllowed(day, phase) && HasRequiredItems(inventory);
+    }
+
 }
