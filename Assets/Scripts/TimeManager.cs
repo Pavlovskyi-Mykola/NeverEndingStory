@@ -39,6 +39,25 @@ public class TimeManager : MonoBehaviour
         RaiseTimeChanged(TimeChangeSource.System);
     }
 
+    public TimeSave CaptureState()
+    {
+        return new TimeSave
+        {
+            dayOfWeek = (int)dayOfWeek,
+            timeOfDay = (int)timeOfDay
+        };
+    }
+
+    public void RestoreState(TimeSave data)
+    {
+        if (data == null) return;
+
+        dayOfWeek = (DayOfWeek)Mathf.Clamp(data.dayOfWeek, 0, 6);
+        timeOfDay = (TimeOfDay)Mathf.Clamp(data.timeOfDay, 0, 3);
+
+        RaiseTimeChanged(TimeChangeSource.System);
+    }
+
     public void AdvancePhase(TimeChangeSource source)
     {
         if (GameManager.Instance != null &&
