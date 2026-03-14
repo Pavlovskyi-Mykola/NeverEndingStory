@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 [Serializable]
 public sealed class SaveData
 {
-    public int version = 1;
+    public int version = SaveVersions.Current;
+
+    public string slotId;
+    public string saveLabel;
+    public string savedAtUtc;
 
     public PlayerStatsSave playerStats = new();
     public TimeSave time = new();
@@ -15,6 +18,25 @@ public sealed class SaveData
 
     public QuestJournal.Snapshot quests = new();
     public DialogueJournal.Snapshot dialogues = new();
+}
+
+public static class SaveVersions
+{
+    public const int Initial = 1;
+    public const int TrackedQuestAndSlots = 2;
+    public const int Current = TrackedQuestAndSlots;
+}
+
+[Serializable]
+public sealed class SaveSlotInfo
+{
+    public string slotId;
+    public string filePath;
+    public bool exists;
+    public string savedAtUtc;
+    public string currentLocationSceneName;
+    public string trackedQuestId;
+    public int version;
 }
 
 [Serializable]
