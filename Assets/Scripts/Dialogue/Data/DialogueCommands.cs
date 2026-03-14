@@ -11,7 +11,8 @@ public enum DialogueCommandType
     SetFlag,
     AddItem,
     RemoveItem,
-    ConsumeItem
+    ConsumeItem,
+    StartQuest
 }
 
 [Serializable]
@@ -73,6 +74,10 @@ public class DialogueCommand
             case DialogueCommandType.ConsumeItem:
                 if (InventoryManager.Instance != null && !string.IsNullOrWhiteSpace(itemId))
                     InventoryManager.Instance.TryConsume(itemId, Mathf.Max(1, amount));
+                break;
+            case DialogueCommandType.StartQuest:
+                if (QuestManager.Instance != null)
+                    QuestManager.Instance.StartQuest(flagId);
                 break;
         }
     }
