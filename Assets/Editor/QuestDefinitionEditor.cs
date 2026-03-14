@@ -733,14 +733,33 @@ public class QuestDefinitionEditor : Editor
     }
     private static float DrawTalkToDialoguePickers(SerializedProperty stepEl, float x, float y, float width)
     {
+        var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
+        var dialogueProp = stepEl.FindPropertyRelative("TargetDialogueId");
+
+        string oldNpcId = npcProp != null ? npcProp.stringValue : "";
+
         y = DrawTalkToNpcPicker(stepEl, x, y, width);
+
+        string newNpcId = npcProp != null ? npcProp.stringValue : "";
+
+        // If NPC changed, clear selected dialogue because the filtered list changed
+        if (!string.Equals(oldNpcId, newNpcId, StringComparison.Ordinal))
+        {
+            if (dialogueProp != null)
+                dialogueProp.stringValue = "";
+
+            RefreshAutoTextForStep(stepEl);
+        }
+
         y = DrawDialoguePicker(stepEl, x, y, width);
         return y;
     }
 
     private static float DrawDialoguePicker(SerializedProperty stepEl, float x, float y, float width)
     {
+        var npcProp = stepEl.FindPropertyRelative("TargetNpcId");
         var dialogueProp = stepEl.FindPropertyRelative("TargetDialogueId");
+
         if (dialogueProp == null || dialogueProp.propertyType != SerializedPropertyType.String)
         {
             EditorGUI.HelpBox(new Rect(x, y, width, 40),
@@ -749,12 +768,22 @@ public class QuestDefinitionEditor : Editor
             return y + 40 + Spacing();
         }
 
-        BuildDialogueOptions(out var labels, out var values);
+        string selectedNpcId = npcProp != null ? npcProp.stringValue : "";
 
-        if (values.Count == 0)
+        if (string.IsNullOrWhiteSpace(selectedNpcId))
         {
             EditorGUI.HelpBox(new Rect(x, y, width, 40),
-                "No DialogueGraph assets found.",
+                "Select Target NPC first.",
+                MessageType.Info);
+            return y + 40 + Spacing();
+        }
+
+        BuildDialogueOptions(selectedNpcId, out var labels, out var values);
+
+        if (values.Count <= 1)
+        {
+            EditorGUI.HelpBox(new Rect(x, y, width, 40),
+                $"No dialogues found in Routes for NPC '{selectedNpcId}'. Add them to that NPC's RouteSet first.",
                 MessageType.Warning);
             return y + 40 + Spacing();
         }
@@ -783,7 +812,7 @@ public class QuestDefinitionEditor : Editor
         return y + EditorGUIUtility.singleLineHeight + Spacing();
     }
 
-    private static void BuildDialogueOptions(out List<string> labels, out List<string> values)
+    private static void BuildDialogueOptions(string npcId, out List<string> labels, out List<string> values)
     {
         labels = new List<string>();
         values = new List<string>();
@@ -791,22 +820,73 @@ public class QuestDefinitionEditor : Editor
         labels.Add("<None>");
         values.Add("");
 
-        string[] guids = AssetDatabase.FindAssets("t:DialogueGraph");
+        var npc = FindNpcDefinitionById(npcId);
+        if (npc == null || npc.Routes == null)
+            return;
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        AddGraph(npc.Routes.fallback, labels, values, seen);
+
+        if (npc.Routes.rules != null)
+        {
+            for (int i = 0; i < npc.Routes.rules.Count; i++)
+            {
+                var rule = npc.Routes.rules[i];
+                if (rule == null) continue;
+
+                AddGraph(rule.graph, labels, values, seen);
+
+                if (rule.pool != null)
+                {
+                    for (int j = 0; j < rule.pool.Length; j++)
+                        AddGraph(rule.pool[j], labels, values, seen);
+                }
+
+                AddGraph(rule.requireNotSeenThis, labels, values, seen);
+                AddGraph(rule.requireSeenThis, labels, values, seen);
+            }
+        }
+    }
+    private static NpcDefinition FindNpcDefinitionById(string npcId)
+    {
+        if (string.IsNullOrWhiteSpace(npcId))
+            return null;
+
+        string[] guids = AssetDatabase.FindAssets("t:NpcDefinition");
         for (int i = 0; i < guids.Length; i++)
         {
             string path = AssetDatabase.GUIDToAssetPath(guids[i]);
-            var graph = AssetDatabase.LoadAssetAtPath<DialogueGraph>(path);
-            if (graph == null) continue;
+            var npc = AssetDatabase.LoadAssetAtPath<NpcDefinition>(path);
+            if (npc == null) continue;
 
-            string id = !string.IsNullOrWhiteSpace(graph.DialogueId) ? graph.DialogueId : graph.name;
-            if (string.IsNullOrWhiteSpace(id)) continue;
-
-            if (!values.Contains(id))
-            {
-                labels.Add($"{id} ({graph.name})");
-                values.Add(id);
-            }
+            if (string.Equals(npc.NpcId, npcId, StringComparison.Ordinal))
+                return npc;
         }
+
+        return null;
+    }
+    private static void AddGraph(
+    DialogueGraph graph,
+    List<string> labels,
+    List<string> values,
+    HashSet<string> seen)
+    {
+        if (graph == null)
+            return;
+
+        string id = !string.IsNullOrWhiteSpace(graph.DialogueId)
+            ? graph.DialogueId
+            : graph.name;
+
+        if (string.IsNullOrWhiteSpace(id))
+            return;
+
+        if (!seen.Add(id))
+            return;
+
+        labels.Add($"{id} ({graph.name})");
+        values.Add(id);
     }
 }
 #endif
