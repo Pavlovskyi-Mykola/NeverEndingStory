@@ -86,6 +86,57 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    public async Task RestoreLocationBySceneName(string sceneName)
+    {
+        if (string.IsNullOrWhiteSpace(sceneName))
+            return;
+
+        var target = FindSceneReferenceByName(sceneName);
+        if (target == null || !target.IsValid)
+        {
+            Debug.LogWarning($"[GameManager] Could not restore location '{sceneName}'.");
+            return;
+        }
+
+        await SwitchLocation(target);
+    }
+
+    private SceneReference FindSceneReferenceByName(string sceneName)
+    {
+        if (sceneDatabase == null || string.IsNullOrWhiteSpace(sceneName))
+            return null;
+
+        if (sceneDatabase.MainMenu != null &&
+            sceneDatabase.MainMenu.IsValid &&
+            string.Equals(sceneDatabase.MainMenu.SceneName, sceneName, StringComparison.Ordinal))
+            return sceneDatabase.MainMenu;
+
+        if (sceneDatabase.Home != null &&
+            sceneDatabase.Home.IsValid &&
+            string.Equals(sceneDatabase.Home.SceneName, sceneName, StringComparison.Ordinal))
+            return sceneDatabase.Home;
+
+        if (sceneDatabase.UI != null &&
+            sceneDatabase.UI.IsValid &&
+            string.Equals(sceneDatabase.UI.SceneName, sceneName, StringComparison.Ordinal))
+            return sceneDatabase.UI;
+
+        if (sceneDatabase.Locations != null)
+        {
+            for (int i = 0; i < sceneDatabase.Locations.Count; i++)
+            {
+                var loc = sceneDatabase.Locations[i];
+                if (loc.Scene == null || !loc.Scene.IsValid)
+                    continue;
+
+                if (string.Equals(loc.Scene.SceneName, sceneName, StringComparison.Ordinal))
+                    return loc.Scene;
+            }
+        }
+
+        return null;
+    }
+
     private void CacheAlreadyLoadedScenes()
     {
         _loaded.Clear();

@@ -42,3 +42,4 @@ public class DialogueGraph : ScriptableObject
     }
 #endif
 }
+

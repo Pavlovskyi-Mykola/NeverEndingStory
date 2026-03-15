@@ -35,6 +35,45 @@ public class InventoryManager : MonoBehaviour
 
     public ItemDatabase Database => itemDatabase;
 
+    public InventorySave CaptureState()
+    {
+        var save = new InventorySave();
+
+        foreach (var kv in _items)
+        {
+            if (string.IsNullOrWhiteSpace(kv.Key)) continue;
+            if (kv.Value <= 0) continue;
+
+            save.items.Add(new InventoryEntrySave
+            {
+                itemId = kv.Key,
+                count = kv.Value
+            });
+        }
+
+        return save;
+    }
+
+    public void RestoreState(InventorySave data)
+    {
+        _items.Clear();
+
+        if (data != null && data.items != null)
+        {
+            for (int i = 0; i < data.items.Count; i++)
+            {
+                var e = data.items[i];
+                if (e == null) continue;
+                if (string.IsNullOrWhiteSpace(e.itemId)) continue;
+                if (e.count <= 0) continue;
+
+                _items[e.itemId] = e.count;
+            }
+        }
+
+        RaiseChanged();
+    }
+
     public bool HasItem(string itemId, int count = 1)
     {
         if (string.IsNullOrWhiteSpace(itemId)) return false;

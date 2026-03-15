@@ -14,9 +14,14 @@ public sealed class QuestJournal : MonoBehaviour
     private readonly HashSet<string> _completed = new();
     private readonly Dictionary<string, QuestProgress> _progressByQuest = new();
 
+    [SerializeField] private string _trackedQuestId;
+
     public IReadOnlyCollection<string> Active => _active;
     public IReadOnlyCollection<string> Completed => _completed;
     public IReadOnlyDictionary<string, QuestProgress> ProgressByQuest => _progressByQuest;
+    public string TrackedQuestId => _trackedQuestId;
+
+    public event Action OnTrackedQuestChanged;
 
     private void Awake()
     {
@@ -63,6 +68,9 @@ public sealed class QuestJournal : MonoBehaviour
         _active.Remove(questId);
         _completed.Add(questId);
 
+        if (string.Equals(_trackedQuestId, questId, StringComparison.Ordinal))
+            SetTrackedQuest(null);
+
         var p = GetOrCreateProgress(questId);
         if (p != null)
         {
@@ -71,16 +79,41 @@ public sealed class QuestJournal : MonoBehaviour
         }
     }
 
+    public void SetTrackedQuest(string questId)
+    {
+        string next = string.IsNullOrWhiteSpace(questId) ? null : questId;
+
+        if (next != null && !IsActive(next))
+            next = null;
+
+        if (string.Equals(_trackedQuestId, next, StringComparison.Ordinal))
+            return;
+
+        _trackedQuestId = next;
+        OnTrackedQuestChanged?.Invoke();
+    }
+
+    public void ToggleTrackedQuest(string questId)
+    {
+        if (string.IsNullOrWhiteSpace(questId))
+        {
+            SetTrackedQuest(null);
+            return;
+        }
+
+        if (string.Equals(_trackedQuestId, questId, StringComparison.Ordinal))
+            SetTrackedQuest(null);
+        else
+            SetTrackedQuest(questId);
+    }
+
     public void ClearAll()
     {
         _active.Clear();
         _completed.Clear();
         _progressByQuest.Clear();
+        _trackedQuestId = null;
     }
-
-    // -----------------------
-    // Save/Load readiness
-    // -----------------------
 
     [Serializable]
     public class Snapshot
@@ -88,6 +121,7 @@ public sealed class QuestJournal : MonoBehaviour
         public List<string> active = new();
         public List<string> completed = new();
         public List<QuestProgress> progress = new();
+        public string trackedQuestId;
     }
 
     public Snapshot CaptureSnapshot()
@@ -95,6 +129,7 @@ public sealed class QuestJournal : MonoBehaviour
         var snap = new Snapshot();
         snap.active.AddRange(_active);
         snap.completed.AddRange(_completed);
+        snap.trackedQuestId = _trackedQuestId;
 
         foreach (var kv in _progressByQuest)
         {
@@ -126,5 +161,14 @@ public sealed class QuestJournal : MonoBehaviour
                 _progressByQuest[p.QuestId] = p;
             }
         }
+
+        _trackedQuestId = string.IsNullOrWhiteSpace(snap.trackedQuestId)
+            ? null
+            : snap.trackedQuestId;
+
+        if (_trackedQuestId != null && !_active.Contains(_trackedQuestId))
+            _trackedQuestId = null;
+
+        OnTrackedQuestChanged?.Invoke();
     }
 }

@@ -34,6 +34,27 @@ public class PlayerStatsManager : MonoBehaviour
         RaiseChanged();
     }
 
+    public PlayerStatsSave CaptureState()
+    {
+        return new PlayerStatsSave
+        {
+            money = money,
+            strength = strength,
+            intellect = intellect
+        };
+    }
+
+    public void RestoreState(PlayerStatsSave data)
+    {
+        if (data == null) return;
+
+        money = Mathf.Max(0, data.money);
+        strength = Mathf.Max(0, data.strength);
+        intellect = Mathf.Max(0, data.intellect);
+
+        RaiseChanged();
+    }
+
     // -------------------------
     // Money
     // -------------------------
