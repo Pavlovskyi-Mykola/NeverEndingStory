@@ -9,8 +9,8 @@ public sealed class CareerManager : MonoBehaviour
 
     [Header("Fresh Game Defaults")]
     [SerializeField] private CareerTier startingTier = CareerTier.Intern;
-    [SerializeField] private string startingCurrentFloorSceneName = "Office_-1";
-    [SerializeField] private List<string> startingUnlockedFloorSceneNames = new();
+    [SerializeField] private SceneReference startingCurrentFloorScene;
+    [SerializeField] private List<SceneReference> startingUnlockedFloorScenes = new();
 
     private CareerTier _currentTier;
     private string _currentFloorSceneName;
@@ -135,17 +135,20 @@ public sealed class CareerManager : MonoBehaviour
     private void ResetToFreshStateInternal(bool raiseEvents)
     {
         _currentTier = startingTier;
-        _currentFloorSceneName = startingCurrentFloorSceneName;
+
+        _currentFloorSceneName = startingCurrentFloorScene != null && startingCurrentFloorScene.IsValid
+            ? startingCurrentFloorScene.SceneName
+            : null;
 
         _unlockedFloors.Clear();
 
-        if (startingUnlockedFloorSceneNames != null)
+        if (startingUnlockedFloorScenes != null)
         {
-            for (int i = 0; i < startingUnlockedFloorSceneNames.Count; i++)
+            for (int i = 0; i < startingUnlockedFloorScenes.Count; i++)
             {
-                var sceneName = startingUnlockedFloorSceneNames[i];
-                if (!string.IsNullOrWhiteSpace(sceneName))
-                    _unlockedFloors.Add(sceneName);
+                var sceneRef = startingUnlockedFloorScenes[i];
+                if (sceneRef != null && sceneRef.IsValid)
+                    _unlockedFloors.Add(sceneRef.SceneName);
             }
         }
 
@@ -199,8 +202,12 @@ public sealed class CareerManager : MonoBehaviour
             ? (CareerTier)snap.currentTier
             : startingTier;
 
+        string defaultFloor = startingCurrentFloorScene != null && startingCurrentFloorScene.IsValid
+            ? startingCurrentFloorScene.SceneName
+            : null;
+
         _currentFloorSceneName = string.IsNullOrWhiteSpace(snap.currentFloorSceneName)
-            ? startingCurrentFloorSceneName
+            ? defaultFloor
             : snap.currentFloorSceneName;
 
         if (snap.unlockedFloors != null)

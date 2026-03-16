@@ -367,24 +367,4 @@ public class GameManager : MonoBehaviour
 
         return !CareerManager.Instance.IsFloorUnlocked(targetLocation.SceneName);
     }
-
-    public async Task SwitchLocationBySceneName(string sceneName)
-    {
-        if (string.IsNullOrWhiteSpace(sceneName) || sceneDatabase == null || sceneDatabase.Locations == null)
-            return;
-
-        for (int i = 0; i < sceneDatabase.Locations.Count; i++)
-        {
-            var entry = sceneDatabase.Locations[i];
-            if (entry.Scene == null || !entry.Scene.IsValid) continue;
-
-            if (string.Equals(entry.Scene.SceneName, sceneName, StringComparison.Ordinal))
-            {
-                await SwitchLocation(entry.Scene);
-                return;
-            }
-        }
-
-        Debug.LogWarning($"[GameManager] Could not find location scene '{sceneName}' in SceneDatabase.");
-    }
 }
