@@ -18,13 +18,16 @@ public sealed class SaveData
 
     public QuestJournal.Snapshot quests = new();
     public DialogueJournal.Snapshot dialogues = new();
+    public CareerManager.Snapshot career = new CareerManager.Snapshot();
 }
 
 public static class SaveVersions
 {
     public const int Initial = 1;
     public const int TrackedQuestAndSlots = 2;
-    public const int Current = TrackedQuestAndSlots;
+    public const int CareerProgression = 3;
+
+    public const int Current = CareerProgression;
 }
 
 [Serializable]

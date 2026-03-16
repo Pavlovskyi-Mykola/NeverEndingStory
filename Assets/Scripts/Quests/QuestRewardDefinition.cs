@@ -16,6 +16,15 @@ public sealed class QuestRewardDefinition
     [Header("Time")]
     public bool AdvanceTimePhase;
 
+    [Header("Career / Promotion")]
+    public bool ApplyPromotion;
+    public CareerTier PromoteTo = CareerTier.Intern;
+    public string UnlockFloorSceneName;
+    public bool SetUnlockedFloorAsCurrent = true;
+
+    [Tooltip("If true, player is moved to the unlocked floor immediately after reward is granted.")]
+    public bool MovePlayerToUnlockedFloor;
+
     public void Grant()
     {
         if (PlayerStatsManager.Instance != null)
@@ -29,5 +38,21 @@ public sealed class QuestRewardDefinition
 
         if (AdvanceTimePhase && TimeManager.Instance != null)
             TimeManager.Instance.AdvancePhase(TimeChangeSource.Quest);
+
+        if (ApplyPromotion && CareerManager.Instance != null)
+        {
+            CareerManager.Instance.ApplyPromotion(
+                PromoteTo,
+                UnlockFloorSceneName,
+                SetUnlockedFloorAsCurrent
+            );
+
+            if (MovePlayerToUnlockedFloor &&
+                !string.IsNullOrWhiteSpace(UnlockFloorSceneName) &&
+                GameManager.Instance != null)
+            {
+                _ = GameManager.Instance.SwitchLocationBySceneName(UnlockFloorSceneName);
+            }
+        }
     }
 }
