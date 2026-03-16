@@ -12,6 +12,7 @@ public class QuestDefinitionEditor : Editor
     private SerializedProperty _title;
     private SerializedProperty _desc;
     private SerializedProperty _steps;
+    private SerializedProperty _completionRewards;
 
     private ReorderableList _list;
 
@@ -21,6 +22,7 @@ public class QuestDefinitionEditor : Editor
         _title = serializedObject.FindProperty("Title");
         _desc = serializedObject.FindProperty("Description");
         _steps = serializedObject.FindProperty("Steps");
+        _completionRewards = serializedObject.FindProperty("CompletionRewards");
 
         _list = new ReorderableList(serializedObject, _steps, true, true, true, true);
         _list.drawHeaderCallback = r => EditorGUI.LabelField(r, "Quest Steps");
@@ -89,6 +91,13 @@ public class QuestDefinitionEditor : Editor
             EditorGUILayout.HelpBox("QuestId is empty. Set a unique id (e.g., q_bob_intro).", MessageType.Error);
 
         _list.DoLayoutList();
+
+        EditorGUILayout.Space(10);
+
+        if (_completionRewards != null)
+        {
+            EditorGUILayout.PropertyField(_completionRewards, true);
+        }
 
         serializedObject.ApplyModifiedProperties();
     }

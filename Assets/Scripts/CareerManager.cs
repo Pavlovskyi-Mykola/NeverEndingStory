@@ -93,40 +93,6 @@ public sealed class CareerManager : MonoBehaviour
         return true;
     }
 
-    public bool ApplyPromotion(CareerTier newTier, string unlockFloorSceneName, bool setUnlockedFloorAsCurrent)
-    {
-        bool changed = false;
-
-        if (newTier > _currentTier)
-        {
-            _currentTier = newTier;
-            OnTierChanged?.Invoke(_currentTier);
-            changed = true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(unlockFloorSceneName))
-        {
-            if (_unlockedFloors.Add(unlockFloorSceneName))
-            {
-                OnFloorUnlocked?.Invoke(unlockFloorSceneName);
-                changed = true;
-            }
-
-            if (setUnlockedFloorAsCurrent &&
-                !string.Equals(_currentFloorSceneName, unlockFloorSceneName, StringComparison.Ordinal))
-            {
-                _currentFloorSceneName = unlockFloorSceneName;
-                OnCurrentFloorChanged?.Invoke(_currentFloorSceneName);
-                changed = true;
-            }
-        }
-
-        if (changed)
-            RaiseChanged();
-
-        return changed;
-    }
-
     public void ResetToFreshState()
     {
         ResetToFreshStateInternal(raiseEvents: true);

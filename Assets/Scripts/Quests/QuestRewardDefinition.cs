@@ -19,11 +19,7 @@ public sealed class QuestRewardDefinition
     [Header("Career / Promotion")]
     public bool ApplyPromotion;
     public CareerTier PromoteTo = CareerTier.Intern;
-    public SceneReference UnlockFloorScene;
-    public bool SetUnlockedFloorAsCurrent = true;
-
-    [Tooltip("If true, player is moved to the unlocked floor immediately after reward is granted.")]
-    public bool MovePlayerToUnlockedFloor;
+    public List<SceneReference> UnlockFloorScenes = new();
 
     public void Grant()
     {
@@ -39,24 +35,20 @@ public sealed class QuestRewardDefinition
         if (AdvanceTimePhase && TimeManager.Instance != null)
             TimeManager.Instance.AdvancePhase(TimeChangeSource.Quest);
 
-        string unlockFloorSceneName =
-            UnlockFloorScene != null && UnlockFloorScene.IsValid
-                ? UnlockFloorScene.SceneName
-                : null;
-
         if (ApplyPromotion && CareerManager.Instance != null)
         {
-            CareerManager.Instance.ApplyPromotion(
-                PromoteTo,
-                unlockFloorSceneName,
-                SetUnlockedFloorAsCurrent
-            );
+            CareerManager.Instance.PromoteTo(PromoteTo);
 
-            if (MovePlayerToUnlockedFloor &&
-                !string.IsNullOrWhiteSpace(unlockFloorSceneName) &&
-                GameManager.Instance != null)
+            if (UnlockFloorScenes != null)
             {
-                _ = GameManager.Instance.SwitchLocation(UnlockFloorScene);
+                for (int i = 0; i < UnlockFloorScenes.Count; i++)
+                {
+                    var sceneRef = UnlockFloorScenes[i];
+                    if (sceneRef == null || !sceneRef.IsValid)
+                        continue;
+
+                    CareerManager.Instance.UnlockFloor(sceneRef.SceneName);
+                }
             }
         }
     }
