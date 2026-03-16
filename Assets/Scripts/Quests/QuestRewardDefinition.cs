@@ -7,8 +7,10 @@ public sealed class QuestRewardDefinition
 {
     [Header("Stats")]
     public int Money;
-    public int Strength;
-    public int Intellect;
+    public int Influence;
+    public int Strategy;
+    public int Networking;
+    public int Reputation;
 
     [Header("World Flags")]
     public List<FlagChange> Flags = new();
@@ -26,8 +28,10 @@ public sealed class QuestRewardDefinition
         if (PlayerStatsManager.Instance != null)
         {
             if (Money != 0) PlayerStatsManager.Instance.AddMoney(Money);
-            if (Strength != 0) PlayerStatsManager.Instance.AddStrength(Strength);
-            if (Intellect != 0) PlayerStatsManager.Instance.AddIntellect(Intellect);
+            if (Influence != 0) PlayerStatsManager.Instance.AddInfluence(Influence);
+            if (Strategy != 0) PlayerStatsManager.Instance.AddStrategy(Strategy);
+            if (Networking != 0) PlayerStatsManager.Instance.AddNetworking(Networking);
+            if (Reputation != 0) PlayerStatsManager.Instance.AddReputation(Reputation);
         }
 
         WorldFlags.Apply(Flags);

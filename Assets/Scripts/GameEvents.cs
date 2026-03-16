@@ -51,17 +51,27 @@ public static class GameEvents
     public readonly struct StatsSnapshot
     {
         public readonly int Money;
-        public readonly int Strength;
-        public readonly int Intellect;
+        public readonly int Influence;
+        public readonly int Strategy;
+        public readonly int Networking;
+        public readonly int Reputation;
 
-        public StatsSnapshot(int money, int strength, int intellect)
+        public StatsSnapshot(int money, int influence, int strategy, int networking, int reputation)
         {
             Money = money;
-            Strength = strength;
-            Intellect = intellect;
+            Influence = influence;
+            Strategy = strategy;
+            Networking = networking;
+            Reputation = reputation;
         }
     }
 
+    public static event Action<StatsSnapshot> StatsChanged;
+
+    public static void RaiseStatsChanged(int money, int influence, int strategy, int networking, int reputation)
+    {
+        StatsChanged?.Invoke(new StatsSnapshot(money, influence, strategy, networking, reputation));
+    }
 
     // -----------------
     // Inventory
@@ -94,14 +104,6 @@ public static class GameEvents
     // World flags
     // -----------------
 
-    public static event Action<StatsSnapshot> StatsChanged;
-
-    public static void RaiseStatsChanged(int money, int strength, int intellect)
-    {
-        StatsChanged?.Invoke(new StatsSnapshot(money, strength, intellect));
-    }
-
-    //Now quests can re-check whenever flags change.
     public static event Action<string, bool> FlagChanged; // (key, value)
 
     public static void RaiseFlagChanged(string key, bool value)

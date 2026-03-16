@@ -262,8 +262,10 @@ public sealed class QuestManager : MonoBehaviour
         var stats = PlayerStatsManager.Instance;
         if (stats == null) return false;
 
-        if (step.RequiredStrength > 0 && stats.Strength < step.RequiredStrength) return false;
-        if (step.RequiredIntellect > 0 && stats.Intellect < step.RequiredIntellect) return false;
+        if (step.RequiredInfluence > 0 && stats.Influence < step.RequiredInfluence) return false;
+        if (step.RequiredStrategy > 0 && stats.Strategy < step.RequiredStrategy) return false;
+        if (step.RequiredNetworking > 0 && stats.Networking < step.RequiredNetworking) return false;
+        if (step.RequiredReputation > 0 && stats.Reputation < step.RequiredReputation) return false;
 
         return true;
     }

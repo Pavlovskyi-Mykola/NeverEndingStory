@@ -26,8 +26,9 @@ public static class SaveVersions
     public const int Initial = 1;
     public const int TrackedQuestAndSlots = 2;
     public const int CareerProgression = 3;
+    public const int CorporateStats = 4;
 
-    public const int Current = CareerProgression;
+    public const int Current = CorporateStats;
 }
 
 [Serializable]
@@ -46,8 +47,10 @@ public sealed class SaveSlotInfo
 public sealed class PlayerStatsSave
 {
     public int money;
-    public int strength;
-    public int intellect;
+    public int influence;
+    public int strategy;
+    public int networking;
+    public int reputation;
 }
 
 [Serializable]

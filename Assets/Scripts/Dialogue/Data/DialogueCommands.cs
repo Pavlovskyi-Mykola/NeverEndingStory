@@ -5,8 +5,10 @@ public enum DialogueCommandType
 {
     AddMoney,
     SpendMoney,
-    AddStrength,
-    AddIntellect,
+    AddInfluence,
+    AddStrategy,
+    AddNetworking,
+    AddReputation,
     AdvanceTimePhase,
     SetFlag,
     AddItem,
@@ -43,14 +45,24 @@ public class DialogueCommand
                     PlayerStatsManager.Instance.TrySpendMoney(amount);
                 break;
 
-            case DialogueCommandType.AddStrength:
+            case DialogueCommandType.AddInfluence:
                 if (PlayerStatsManager.Instance != null)
-                    PlayerStatsManager.Instance.AddStrength(amount);
+                    PlayerStatsManager.Instance.AddInfluence(amount);
                 break;
 
-            case DialogueCommandType.AddIntellect:
+            case DialogueCommandType.AddStrategy:
                 if (PlayerStatsManager.Instance != null)
-                    PlayerStatsManager.Instance.AddIntellect(amount);
+                    PlayerStatsManager.Instance.AddStrategy(amount);
+                break;
+
+            case DialogueCommandType.AddNetworking:
+                if (PlayerStatsManager.Instance != null)
+                    PlayerStatsManager.Instance.AddNetworking(amount);
+                break;
+
+            case DialogueCommandType.AddReputation:
+                if (PlayerStatsManager.Instance != null)
+                    PlayerStatsManager.Instance.AddReputation(amount);
                 break;
 
             case DialogueCommandType.AdvanceTimePhase:

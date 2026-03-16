@@ -5,12 +5,12 @@ using UnityEngine;
 public enum DialogueConditionType
 {
     MoneyAtLeast,
-    StrengthAtLeast,
-    IntellectAtLeast,
+    InfluenceAtLeast,
+    StrategyAtLeast,
+    NetworkingAtLeast,
+    ReputationAtLeast,
     TimeOfDayIs,
-    FlagIsTrue,
-    HasItem,
-    ItemCountAtLeast
+    FlagIsTrue
 }
 
 [Serializable]
@@ -20,10 +20,6 @@ public class DialogueCondition
 
     public int intValue;
     public TimeOfDay timeOfDayValue;
-
-    public string flagId;
-
-    [ItemId] public string itemId;
 }
 
 [Serializable]
@@ -40,6 +36,7 @@ public class DialogueConditionGroup
             if (!EvaluateSingle(all[i]))
                 return false;
         }
+
         return true;
     }
 
@@ -48,32 +45,22 @@ public class DialogueConditionGroup
         switch (c.type)
         {
             case DialogueConditionType.MoneyAtLeast:
-                return PlayerStatsManager.Instance != null &&
-                       PlayerStatsManager.Instance.Money >= c.intValue;
+                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Money >= c.intValue;
 
-            case DialogueConditionType.StrengthAtLeast:
-                return PlayerStatsManager.Instance != null &&
-                       PlayerStatsManager.Instance.Strength >= c.intValue;
+            case DialogueConditionType.InfluenceAtLeast:
+                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Influence >= c.intValue;
 
-            case DialogueConditionType.IntellectAtLeast:
-                return PlayerStatsManager.Instance != null &&
-                       PlayerStatsManager.Instance.Intellect >= c.intValue;
+            case DialogueConditionType.StrategyAtLeast:
+                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Strategy >= c.intValue;
+
+            case DialogueConditionType.NetworkingAtLeast:
+                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Networking >= c.intValue;
+
+            case DialogueConditionType.ReputationAtLeast:
+                return PlayerStatsManager.Instance != null && PlayerStatsManager.Instance.Reputation >= c.intValue;
 
             case DialogueConditionType.TimeOfDayIs:
-                return TimeManager.Instance != null &&
-                       TimeManager.Instance.TimeOfDay == c.timeOfDayValue;
-
-            case DialogueConditionType.FlagIsTrue:
-                return WorldState.Instance != null &&
-                       WorldState.Instance.HasFlag(c.flagId);
-
-            case DialogueConditionType.HasItem:
-                return InventoryManager.Instance != null &&
-                       InventoryManager.Instance.HasItem(c.itemId);
-
-            case DialogueConditionType.ItemCountAtLeast:
-                return InventoryManager.Instance != null &&
-                       InventoryManager.Instance.GetCount(c.itemId) >= c.intValue;
+                return TimeManager.Instance != null && TimeManager.Instance.TimeOfDay == c.timeOfDayValue;
 
             default:
                 return true;
