@@ -8,7 +8,7 @@ public sealed class CareerManager : MonoBehaviour
     public static event Action<CareerManager> InstanceReady;
 
     [Header("Fresh Game Defaults")]
-    [SerializeField] private CareerTier startingTier = CareerTier.Intern;
+    private CareerTier startingTier = CareerTier.Intern;
     [SerializeField] private SceneReference startingCurrentFloorScene;
     [SerializeField] private List<SceneReference> startingUnlockedFloorScenes = new();
 
