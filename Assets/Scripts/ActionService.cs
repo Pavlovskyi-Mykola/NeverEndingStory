@@ -83,34 +83,13 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        if (stats.Money < action.RequiredMoney)
+        foreach (StatType stat in System.Enum.GetValues(typeof(StatType)))
         {
-            reason = ActionFailReason.NotEnoughMoney;
-            return false;
-        }
-
-        if (stats.Influence < action.RequiredInfluence)
-        {
-            reason = ActionFailReason.NotEnoughInfluence;
-            return false;
-        }
-
-        if (stats.Strategy < action.RequiredStrategy)
-        {
-            reason = ActionFailReason.NotEnoughStrategy;
-            return false;
-        }
-
-        if (stats.Networking < action.RequiredNetworking)
-        {
-            reason = ActionFailReason.NotEnoughNetworking;
-            return false;
-        }
-
-        if (stats.Reputation < action.RequiredReputation)
-        {
-            reason = ActionFailReason.NotEnoughReputation;
-            return false;
+            if (stats.Get(stat) < action.GetRequirement(stat))
+            {
+                reason = StatToFailReason(stat);
+                return false;
+            }
         }
 
         if (action.RequiredItems != null)
@@ -160,12 +139,6 @@ public class ActionService : MonoBehaviour
 
     public bool Execute(ActionDefinition action, out ActionFailReason reason)
     {
-        if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
-        {
-            reason = ActionFailReason.BlockedByDialogue;
-            return false;
-        }
-
         if (!CanExecute(action, out reason))
             return false;
 
@@ -187,20 +160,11 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        if (action.MoneyReward > 0)
-            stats.AddMoney(action.MoneyReward);
-
-        if (action.InfluenceReward > 0)
-            stats.AddInfluence(action.InfluenceReward);
-
-        if (action.StrategyReward > 0)
-            stats.AddStrategy(action.StrategyReward);
-
-        if (action.NetworkingReward > 0)
-            stats.AddNetworking(action.NetworkingReward);
-
-        if (action.ReputationReward > 0)
-            stats.AddReputation(action.ReputationReward);
+        foreach (StatType stat in System.Enum.GetValues(typeof(StatType)))
+        {
+            int reward = action.GetReward(stat);
+            if (reward > 0) stats.Add(stat, reward);
+        }
 
         if (action.ItemRewards != null && inventory != null)
         {
@@ -227,4 +191,14 @@ public class ActionService : MonoBehaviour
     {
         OnActionStateChanged?.Invoke();
     }
+
+    private static ActionFailReason StatToFailReason(StatType stat) => stat switch
+    {
+        StatType.Money      => ActionFailReason.NotEnoughMoney,
+        StatType.Influence  => ActionFailReason.NotEnoughInfluence,
+        StatType.Strategy   => ActionFailReason.NotEnoughStrategy,
+        StatType.Networking => ActionFailReason.NotEnoughNetworking,
+        StatType.Reputation => ActionFailReason.NotEnoughReputation,
+        _ => ActionFailReason.NotAvailableHere
+    };
 }

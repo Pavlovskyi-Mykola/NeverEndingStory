@@ -58,4 +58,24 @@ public class ActionDefinition : ScriptableObject
 
     [Header("Time")]
     public TimeSkipMode TimeSkip = TimeSkipMode.None;
+
+    public int GetRequirement(StatType stat) => stat switch
+    {
+        StatType.Money      => RequiredMoney,
+        StatType.Influence  => RequiredInfluence,
+        StatType.Strategy   => RequiredStrategy,
+        StatType.Networking => RequiredNetworking,
+        StatType.Reputation => RequiredReputation,
+        _ => 0
+    };
+
+    public int GetReward(StatType stat) => stat switch
+    {
+        StatType.Money      => MoneyReward,
+        StatType.Influence  => InfluenceReward,
+        StatType.Strategy   => StrategyReward,
+        StatType.Networking => NetworkingReward,
+        StatType.Reputation => ReputationReward,
+        _ => 0
+    };
 }

@@ -106,6 +106,28 @@ public class PlayerStatsManager : MonoBehaviour
         RaiseChanged();
     }
 
+    public int Get(StatType stat) => stat switch
+    {
+        StatType.Money => money,
+        StatType.Influence => influence,
+        StatType.Strategy => strategy,
+        StatType.Networking => networking,
+        StatType.Reputation => reputation,
+        _ => 0
+    };
+
+    public void Add(StatType stat, int amount)
+    {
+        switch (stat)
+        {
+            case StatType.Money:      AddMoney(amount);      break;
+            case StatType.Influence:  AddInfluence(amount);  break;
+            case StatType.Strategy:   AddStrategy(amount);   break;
+            case StatType.Networking: AddNetworking(amount); break;
+            case StatType.Reputation: AddReputation(amount); break;
+        }
+    }
+
     public bool MeetsRequirements(
         int requiredMoney,
         int requiredInfluence,

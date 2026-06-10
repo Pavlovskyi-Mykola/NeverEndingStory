@@ -23,15 +23,26 @@ public sealed class QuestRewardDefinition
     public CareerTier PromoteTo = CareerTier.Intern;
     public List<SceneReference> UnlockFloorScenes = new();
 
+    public int GetReward(StatType stat) => stat switch
+    {
+        StatType.Money      => Money,
+        StatType.Influence  => Influence,
+        StatType.Strategy   => Strategy,
+        StatType.Networking => Networking,
+        StatType.Reputation => Reputation,
+        _ => 0
+    };
+
     public void Grant()
     {
-        if (PlayerStatsManager.Instance != null)
+        var stats = PlayerStatsManager.Instance;
+        if (stats != null)
         {
-            if (Money != 0) PlayerStatsManager.Instance.AddMoney(Money);
-            if (Influence != 0) PlayerStatsManager.Instance.AddInfluence(Influence);
-            if (Strategy != 0) PlayerStatsManager.Instance.AddStrategy(Strategy);
-            if (Networking != 0) PlayerStatsManager.Instance.AddNetworking(Networking);
-            if (Reputation != 0) PlayerStatsManager.Instance.AddReputation(Reputation);
+            foreach (StatType stat in System.Enum.GetValues(typeof(StatType)))
+            {
+                int amount = GetReward(stat);
+                if (amount != 0) stats.Add(stat, amount);
+            }
         }
 
         WorldFlags.Apply(Flags);
