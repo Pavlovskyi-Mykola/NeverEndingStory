@@ -59,7 +59,6 @@ public class ActionService : MonoBehaviour
 
         var inventory = InventoryManager.Instance;
 
-        // Phase restriction
         if (action.RestrictByPhase && TimeManager.Instance != null)
         {
             var phase = TimeManager.Instance.TimeOfDay;
@@ -84,26 +83,36 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        // Stat requirements
         if (stats.Money < action.RequiredMoney)
         {
             reason = ActionFailReason.NotEnoughMoney;
             return false;
         }
 
-        if (stats.Strength < action.RequiredStrength)
+        if (stats.Influence < action.RequiredInfluence)
         {
-            reason = ActionFailReason.NotEnoughStrength;
+            reason = ActionFailReason.NotEnoughInfluence;
             return false;
         }
 
-        if (stats.Intellect < action.RequiredIntellect)
+        if (stats.Strategy < action.RequiredStrategy)
         {
-            reason = ActionFailReason.NotEnoughIntellect;
+            reason = ActionFailReason.NotEnoughStrategy;
             return false;
         }
 
-        // Required items (must own, not consumed)
+        if (stats.Networking < action.RequiredNetworking)
+        {
+            reason = ActionFailReason.NotEnoughNetworking;
+            return false;
+        }
+
+        if (stats.Reputation < action.RequiredReputation)
+        {
+            reason = ActionFailReason.NotEnoughReputation;
+            return false;
+        }
+
         if (action.RequiredItems != null)
         {
             for (int i = 0; i < action.RequiredItems.Length; i++)
@@ -122,7 +131,6 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        // Costs
         if (stats.Money < action.MoneyCost)
         {
             reason = ActionFailReason.NotEnoughMoney;
@@ -164,11 +172,9 @@ public class ActionService : MonoBehaviour
         var stats = PlayerStatsManager.Instance;
         var inventory = InventoryManager.Instance;
 
-        // Pay money cost
         if (action.MoneyCost > 0)
             stats.TrySpendMoney(action.MoneyCost);
 
-        // Pay item costs
         if (action.ItemCosts != null && inventory != null)
         {
             for (int i = 0; i < action.ItemCosts.Length; i++)
@@ -181,17 +187,21 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        // Stat rewards
         if (action.MoneyReward > 0)
             stats.AddMoney(action.MoneyReward);
 
-        if (action.StrengthReward > 0)
-            stats.AddStrength(action.StrengthReward);
+        if (action.InfluenceReward > 0)
+            stats.AddInfluence(action.InfluenceReward);
 
-        if (action.IntellectReward > 0)
-            stats.AddIntellect(action.IntellectReward);
+        if (action.StrategyReward > 0)
+            stats.AddStrategy(action.StrategyReward);
 
-        // Item rewards
+        if (action.NetworkingReward > 0)
+            stats.AddNetworking(action.NetworkingReward);
+
+        if (action.ReputationReward > 0)
+            stats.AddReputation(action.ReputationReward);
+
         if (action.ItemRewards != null && inventory != null)
         {
             for (int i = 0; i < action.ItemRewards.Length; i++)
@@ -204,7 +214,6 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        // Time
         if (action.TimeSkip == TimeSkipMode.NextPhase &&
             TimeManager.Instance != null)
         {

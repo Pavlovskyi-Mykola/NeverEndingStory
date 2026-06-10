@@ -7,16 +7,17 @@ public class PlayerStatsManager : MonoBehaviour
 
     [Header("Stats")]
     [SerializeField] private int money = 0;
-    [SerializeField] private int strength = 1;
-    [SerializeField] private int intellect = 1;
+    [SerializeField] private int influence = 1;
+    [SerializeField] private int strategy = 1;
+    [SerializeField] private int networking = 1;
+    [SerializeField] private int reputation = 1;
 
     public int Money => money;
-    public int Strength => strength;
-    public int Intellect => intellect;
+    public int Influence => influence;
+    public int Strategy => strategy;
+    public int Networking => networking;
+    public int Reputation => reputation;
 
-    /// <summary>
-    /// Fired whenever any stat changes.
-    /// </summary>
     public event Action OnStatsChanged;
 
     private void Awake()
@@ -30,7 +31,6 @@ public class PlayerStatsManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Push initial state to listeners (UI can safely subscribe later too)
         RaiseChanged();
     }
 
@@ -39,8 +39,10 @@ public class PlayerStatsManager : MonoBehaviour
         return new PlayerStatsSave
         {
             money = money,
-            strength = strength,
-            intellect = intellect
+            influence = influence,
+            strategy = strategy,
+            networking = networking,
+            reputation = reputation
         };
     }
 
@@ -49,15 +51,14 @@ public class PlayerStatsManager : MonoBehaviour
         if (data == null) return;
 
         money = Mathf.Max(0, data.money);
-        strength = Mathf.Max(0, data.strength);
-        intellect = Mathf.Max(0, data.intellect);
+        influence = Mathf.Max(0, data.influence);
+        strategy = Mathf.Max(0, data.strategy);
+        networking = Mathf.Max(0, data.networking);
+        reputation = Mathf.Max(0, data.reputation);
 
         RaiseChanged();
     }
 
-    // -------------------------
-    // Money
-    // -------------------------
     public void AddMoney(int amount)
     {
         if (amount <= 0) return;
@@ -77,37 +78,58 @@ public class PlayerStatsManager : MonoBehaviour
         return true;
     }
 
-    // -------------------------
-    // Strength / Intellect
-    // -------------------------
-    public void AddStrength(int amount)
+    public void AddInfluence(int amount)
     {
         if (amount <= 0) return;
-        strength += amount;
+        influence += amount;
         RaiseChanged();
     }
 
-    public void AddIntellect(int amount)
+    public void AddStrategy(int amount)
     {
         if (amount <= 0) return;
-        intellect += amount;
+        strategy += amount;
         RaiseChanged();
     }
 
-    // -------------------------
-    // Requirements (for gating actions)
-    // -------------------------
-    public bool MeetsRequirements(int requiredMoney, int requiredStrength, int requiredIntellect)
+    public void AddNetworking(int amount)
+    {
+        if (amount <= 0) return;
+        networking += amount;
+        RaiseChanged();
+    }
+
+    public void AddReputation(int amount)
+    {
+        if (amount <= 0) return;
+        reputation += amount;
+        RaiseChanged();
+    }
+
+    public bool MeetsRequirements(
+        int requiredMoney,
+        int requiredInfluence,
+        int requiredStrategy,
+        int requiredNetworking,
+        int requiredReputation)
     {
         if (money < requiredMoney) return false;
-        if (strength < requiredStrength) return false;
-        if (intellect < requiredIntellect) return false;
+        if (influence < requiredInfluence) return false;
+        if (strategy < requiredStrategy) return false;
+        if (networking < requiredNetworking) return false;
+        if (reputation < requiredReputation) return false;
         return true;
     }
 
     private void RaiseChanged()
     {
         OnStatsChanged?.Invoke();
-        GameEvents.RaiseStatsChanged(money, strength, intellect);
+
+        GameEvents.RaiseStatsChanged(
+            money,
+            influence,
+            strategy,
+            networking,
+            reputation);
     }
 }

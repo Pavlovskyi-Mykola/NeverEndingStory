@@ -8,8 +8,10 @@ public enum ActionFailReason
     NotAvailableHere,
     WrongTimePhase,
     NotEnoughMoney,
-    NotEnoughStrength,
-    NotEnoughIntellect,
+    NotEnoughInfluence,
+    NotEnoughStrategy,
+    NotEnoughNetworking,
+    NotEnoughReputation,
     MissingRequiredItem,
     MissingCostItem
 }
@@ -34,8 +36,10 @@ public class ActionDefinition : ScriptableObject
 
     [Header("Stat Requirements")]
     public int RequiredMoney = 0;
-    public int RequiredStrength = 0;
-    public int RequiredIntellect = 0;
+    public int RequiredInfluence = 0;
+    public int RequiredStrategy = 0;
+    public int RequiredNetworking = 0;
+    public int RequiredReputation = 0;
 
     [Header("Item Requirements (must have, not consumed)")]
     public ItemAmount[] RequiredItems = Array.Empty<ItemAmount>();
@@ -46,8 +50,10 @@ public class ActionDefinition : ScriptableObject
 
     [Header("Rewards")]
     public int MoneyReward = 0;
-    public int StrengthReward = 0;
-    public int IntellectReward = 0;
+    public int InfluenceReward = 0;
+    public int StrategyReward = 0;
+    public int NetworkingReward = 0;
+    public int ReputationReward = 0;
     public ItemAmount[] ItemRewards = Array.Empty<ItemAmount>();
 
     [Header("Time")]

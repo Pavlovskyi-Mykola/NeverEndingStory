@@ -281,9 +281,14 @@ public class GameManager : MonoBehaviour
         if (targetLocation == null || !targetLocation.IsValid)
             return;
 
+        if (IsBlockedByCareer(targetLocation))
+        {
+            Debug.Log($"Blocked travel to '{targetLocation.SceneName}' because floor is not unlocked yet.");
+            return;
+        }
+
         LocationLoadStarted?.Invoke(targetLocation);
 
-        // ✅ Optional but recommended: also enforce restriction on manual travel
         if (sceneDatabase != null && TimeManager.Instance != null)
         {
             var day = TimeManager.Instance.DayOfWeek;
@@ -297,16 +302,16 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // unload previous location if any
         if (CurrentLocationRef != null && CurrentLocationRef.IsValid)
             await Unload(CurrentLocationRef);
 
         await Load(targetLocation, setActive: true);
 
-        // ✅ store reference
         CurrentLocationRef = targetLocation;
 
-        // ✅ THIS is the key hook NPC system will listen to
+        if (CareerManager.Instance != null)
+            CareerManager.Instance.SetCurrentFloor(targetLocation.SceneName);
+
         LocationReady?.Invoke(CurrentLocationRef);
         GameEvents.RaiseLocationEntered(CurrentLocationRef.SceneName);
     }
@@ -350,5 +355,16 @@ public class GameManager : MonoBehaviour
         // Force UI to refresh availability immediately
         if (ActionService.Instance != null)
             ActionService.Instance.NotifyStateChanged();
+    }
+
+    private bool IsBlockedByCareer(SceneReference targetLocation)
+    {
+        if (targetLocation == null || !targetLocation.IsValid)
+            return true;
+
+        if (CareerManager.Instance == null)
+            return false;
+
+        return !CareerManager.Instance.IsFloorUnlocked(targetLocation.SceneName);
     }
 }

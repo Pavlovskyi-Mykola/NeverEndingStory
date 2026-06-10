@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 public enum DialogueRuleKind
@@ -60,8 +59,10 @@ public class DialogueSelectorRule
 
     [Header("Stats (optional)")]
     public int requiredMoney = 0;
-    public int requiredStrength = 0;
-    public int requiredIntellect = 0;
+    public int requiredInfluence = 0;
+    public int requiredStrategy = 0;
+    public int requiredNetworking = 0;
+    public int requiredReputation = 0;
 
     [Header("Optional graph-level conditions")]
     public DialogueConditionGroup extraConditions;
@@ -198,10 +199,16 @@ public class DialogueSelectorRule
         if (ctx.Money < requiredMoney)
             return false;
 
-        if (ctx.Strength < requiredStrength)
+        if (ctx.Influence < requiredInfluence)
             return false;
 
-        if (ctx.Intellect < requiredIntellect)
+        if (ctx.Strategy < requiredStrategy)
+            return false;
+
+        if (ctx.Networking < requiredNetworking)
+            return false;
+
+        if (ctx.Reputation < requiredReputation)
             return false;
 
         return true;

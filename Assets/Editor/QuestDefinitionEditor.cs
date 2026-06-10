@@ -12,6 +12,7 @@ public class QuestDefinitionEditor : Editor
     private SerializedProperty _title;
     private SerializedProperty _desc;
     private SerializedProperty _steps;
+    private SerializedProperty _completionRewards;
 
     private ReorderableList _list;
 
@@ -21,6 +22,7 @@ public class QuestDefinitionEditor : Editor
         _title = serializedObject.FindProperty("Title");
         _desc = serializedObject.FindProperty("Description");
         _steps = serializedObject.FindProperty("Steps");
+        _completionRewards = serializedObject.FindProperty("CompletionRewards");
 
         _list = new ReorderableList(serializedObject, _steps, true, true, true, true);
         _list.drawHeaderCallback = r => EditorGUI.LabelField(r, "Quest Steps");
@@ -90,6 +92,13 @@ public class QuestDefinitionEditor : Editor
 
         _list.DoLayoutList();
 
+        EditorGUILayout.Space(10);
+
+        if (_completionRewards != null)
+        {
+            EditorGUILayout.PropertyField(_completionRewards, true);
+        }
+
         serializedObject.ApplyModifiedProperties();
     }
 
@@ -120,9 +129,13 @@ public class QuestDefinitionEditor : Editor
                 break;
 
             case QuestStepType.MinStats:
-                h += PropHeight(stepEl.FindPropertyRelative("RequiredStrength"));
+                h += PropHeight(stepEl.FindPropertyRelative("RequiredInfluence"));
                 h += Spacing();
-                h += PropHeight(stepEl.FindPropertyRelative("RequiredIntellect"));
+                h += PropHeight(stepEl.FindPropertyRelative("RequiredStrategy"));
+                h += Spacing();
+                h += PropHeight(stepEl.FindPropertyRelative("RequiredNetworking"));
+                h += Spacing();
+                h += PropHeight(stepEl.FindPropertyRelative("RequiredReputation"));
                 h += Spacing();
                 break;
 
@@ -206,8 +219,10 @@ public class QuestDefinitionEditor : Editor
                 break;
 
             case QuestStepType.MinStats:
-                y = DrawProp(stepEl.FindPropertyRelative("RequiredStrength"), rect.x, y, rect.width);
-                y = DrawProp(stepEl.FindPropertyRelative("RequiredIntellect"), rect.x, y, rect.width);
+                y = DrawProp(stepEl.FindPropertyRelative("RequiredInfluence"), rect.x, y, rect.width);
+                y = DrawProp(stepEl.FindPropertyRelative("RequiredStrategy"), rect.x, y, rect.width);
+                y = DrawProp(stepEl.FindPropertyRelative("RequiredNetworking"), rect.x, y, rect.width);
+                y = DrawProp(stepEl.FindPropertyRelative("RequiredReputation"), rect.x, y, rect.width);
                 break;
 
             case QuestStepType.HaveMoney:
@@ -301,10 +316,13 @@ public class QuestDefinitionEditor : Editor
 
         if (type == QuestStepType.MinStats)
         {
-            int s = stepEl.FindPropertyRelative("RequiredStrength")?.intValue ?? 0;
-            int i = stepEl.FindPropertyRelative("RequiredIntellect")?.intValue ?? 0;
-            if (s <= 0 && i <= 0)
-                return "MinStats: set RequiredStrength and/or RequiredIntellect.";
+            int influence = stepEl.FindPropertyRelative("RequiredInfluence")?.intValue ?? 0;
+            int strategy = stepEl.FindPropertyRelative("RequiredStrategy")?.intValue ?? 0;
+            int networking = stepEl.FindPropertyRelative("RequiredNetworking")?.intValue ?? 0;
+            int reputation = stepEl.FindPropertyRelative("RequiredReputation")?.intValue ?? 0;
+
+            if (influence <= 0 && strategy <= 0 && networking <= 0 && reputation <= 0)
+                return "MinStats: set at least one required corporate stat.";
         }
 
         if (type == QuestStepType.HaveMoney || type == QuestStepType.PayMoney)
@@ -478,13 +496,21 @@ public class QuestDefinitionEditor : Editor
                 }
             case QuestStepType.MinStats:
                 {
-                    int str = stepEl.FindPropertyRelative("RequiredStrength")?.intValue ?? 0;
-                    int intel = stepEl.FindPropertyRelative("RequiredIntellect")?.intValue ?? 0;
+                    int influence = stepEl.FindPropertyRelative("RequiredInfluence")?.intValue ?? 0;
+                    int strategy = stepEl.FindPropertyRelative("RequiredStrategy")?.intValue ?? 0;
+                    int networking = stepEl.FindPropertyRelative("RequiredNetworking")?.intValue ?? 0;
+                    int reputation = stepEl.FindPropertyRelative("RequiredReputation")?.intValue ?? 0;
 
-                    if (str > 0 && intel > 0) SetAutoText(stepEl, $"Reach Strength {str} and Intellect {intel}");
-                    else if (str > 0) SetAutoText(stepEl, $"Reach Strength {str}");
-                    else if (intel > 0) SetAutoText(stepEl, $"Reach Intellect {intel}");
-                    else SetAutoText(stepEl, "Increase your stats");
+                    var parts = new List<string>();
+
+                    if (influence > 0) parts.Add($"Influence {influence}");
+                    if (strategy > 0) parts.Add($"Strategy {strategy}");
+                    if (networking > 0) parts.Add($"Networking {networking}");
+                    if (reputation > 0) parts.Add($"Reputation {reputation}");
+
+                    SetAutoText(stepEl, parts.Count > 0
+                        ? $"Reach {string.Join(", ", parts)}"
+                        : "Increase your corporate stats");
                     break;
                 }
             case QuestStepType.Manual:

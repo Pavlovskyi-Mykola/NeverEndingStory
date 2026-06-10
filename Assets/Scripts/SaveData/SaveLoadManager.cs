@@ -20,6 +20,7 @@ public sealed class SaveLoadManager : MonoBehaviour
     [SerializeField] private bool autosaveOnQuestChange = true;
     [SerializeField] private bool autosaveOnTrackedQuestChange = true;
     [SerializeField] private float autosaveDelay = 1.5f;
+    [SerializeField] private bool autosaveOnCareerChange = true;
 
     [Header("Debug")]
     [SerializeField] private bool prettyPrintJson = true;
@@ -56,6 +57,8 @@ public sealed class SaveLoadManager : MonoBehaviour
 
         if (QuestJournal.Instance != null)
             QuestJournal.Instance.OnTrackedQuestChanged += HandleTrackedQuestChanged;
+        if (CareerManager.Instance != null)
+            CareerManager.Instance.OnCareerStateChanged += HandleCareerStateChanged;
     }
 
     private void OnDisable()
@@ -68,6 +71,8 @@ public sealed class SaveLoadManager : MonoBehaviour
 
         if (QuestJournal.Instance != null)
             QuestJournal.Instance.OnTrackedQuestChanged -= HandleTrackedQuestChanged;
+        if (CareerManager.Instance != null)
+            CareerManager.Instance.OnCareerStateChanged -= HandleCareerStateChanged;
     }
 
     private async void Start()
@@ -356,7 +361,11 @@ public sealed class SaveLoadManager : MonoBehaviour
 
             dialogues = DialogueJournal.Instance != null
                 ? DialogueJournal.Instance.CaptureSnapshot()
-                : new DialogueJournal.Snapshot()
+                : new DialogueJournal.Snapshot(),
+
+            career = CareerManager.Instance != null
+                ? CareerManager.Instance.CaptureSnapshot()
+                : new CareerManager.Snapshot()
         };
     }
 
@@ -383,6 +392,9 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (QuestJournal.Instance != null)
             QuestJournal.Instance.RestoreSnapshot(data.quests);
 
+        if (CareerManager.Instance != null)
+            CareerManager.Instance.RestoreSnapshot(data.career);
+
         if (GameManager.Instance != null && !string.IsNullOrWhiteSpace(data.currentLocationSceneName))
             await GameManager.Instance.RestoreLocationBySceneName(data.currentLocationSceneName);
     }
@@ -394,6 +406,9 @@ public sealed class SaveLoadManager : MonoBehaviour
 
         if (data.version <= 0)
             data.version = SaveVersions.Initial;
+
+        if (data.career == null)
+            data.career = new CareerManager.Snapshot();
 
         if (data.version < SaveVersions.TrackedQuestAndSlots)
         {
@@ -413,5 +428,11 @@ public sealed class SaveLoadManager : MonoBehaviour
 
         data.version = SaveVersions.Current;
         return data;
+    }
+
+    private void HandleCareerStateChanged()
+    {
+        if (autosaveEnabled && autosaveOnCareerChange)
+            RequestAutosave();
     }
 }

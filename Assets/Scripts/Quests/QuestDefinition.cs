@@ -45,8 +45,10 @@ public class QuestStepDefinition
     public DayPhaseMask AllowedPhases = DayPhaseMask.All;
 
     [Header("Stats requirements (MinStats)")]
-    public int RequiredStrength = 0;
-    public int RequiredIntellect = 0;
+    public int RequiredInfluence = 0;
+    public int RequiredStrategy = 0;
+    public int RequiredNetworking = 0;
+    public int RequiredReputation = 0;
 
     [Header("Money (HaveMoney / PayMoney)")]
     public int RequiredMoney = 0;

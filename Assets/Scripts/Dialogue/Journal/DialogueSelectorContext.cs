@@ -11,8 +11,10 @@ public struct DialogueSelectorContext
     public TimeOfDay Phase;
 
     public int Money;
-    public int Strength;
-    public int Intellect;
+    public int Influence;
+    public int Strategy;
+    public int Networking;
+    public int Reputation;
 
     public static DialogueSelectorContext From(string npcId, string locationId)
     {
@@ -23,8 +25,10 @@ public struct DialogueSelectorContext
             Day = TimeManager.Instance != null ? TimeManager.Instance.DayOfWeek : DateTime.Now.DayOfWeek,
             Phase = TimeManager.Instance != null ? TimeManager.Instance.TimeOfDay : TimeOfDay.Morning,
             Money = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Money : 0,
-            Strength = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Strength : 0,
-            Intellect = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Intellect : 0
+            Influence = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Influence : 0,
+            Strategy = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Strategy : 0,
+            Networking = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Networking : 0,
+            Reputation = PlayerStatsManager.Instance != null ? PlayerStatsManager.Instance.Reputation : 0
         };
     }
 
