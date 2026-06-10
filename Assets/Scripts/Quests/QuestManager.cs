@@ -329,6 +329,10 @@ public sealed class QuestManager : MonoBehaviour
             case QuestStepType.HaveItem:
                 return HasRequiredItem(step);
 
+            case QuestStepType.TimeWindow:
+                // MeetsTimeConstraints already gates on the window; if we reach here it's open
+                return true;
+
             case QuestStepType.TalkToDialogue:
                 {
                     if (prog.LastConsumedTalkToken == _talkToken)
