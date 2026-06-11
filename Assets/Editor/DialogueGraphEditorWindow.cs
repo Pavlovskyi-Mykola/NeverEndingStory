@@ -16,11 +16,9 @@ public class DialogueGraphEditorWindow : EditorWindow
     private SerializedProperty _nodesProp;
     private SerializedProperty _startNodeIdProp;
 
-    private string[] _speakerOptions = Array.Empty<string>();
-    private double _speakerOptionsLastRefreshTime;
     private string[] _speakerOptionsCache = Array.Empty<string>();
     private double _speakerOptionsNextRefreshTime = 0;
-    private const double SpeakerRefreshInterval = 1.0; // seconds
+    private const double SpeakerRefreshInterval = 1.0;
 
     [SerializeField] private bool showGrid = true;
     [SerializeField] private float gridSmall = 20f;
@@ -58,8 +56,6 @@ public class DialogueGraphEditorWindow : EditorWindow
     private readonly Dictionary<string, Rect> _nodeRects = new();
     private readonly Dictionary<(string nodeId, string portKey), Vector2> _portCentersLocal = new();
 
-    // Context menu (right-click)
-    private bool _suppressRightClickCancelOnce;
     private Vector2 _lastCanvasMouse; // in canvas coords (scroll included)
 
     // -------------------- Node coloring / styles --------------------
@@ -148,6 +144,9 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             GUILayout.FlexibleSpace();
             snapToGrid = GUILayout.Toggle(snapToGrid, "Snap", EditorStyles.toolbarButton);
+
+            if (GUILayout.Button("New Graph", EditorStyles.toolbarButton))
+                CreateNewGraph();
 
             using (new EditorGUI.DisabledScope(_graph == null))
             {
@@ -357,15 +356,15 @@ public class DialogueGraphEditorWindow : EditorWindow
         // Now that ports were laid out and cached, draw connections using the cached port centers.
         DrawAllConnections();
 
-        // Cancel pending connect by right click on canvas (but not when context menu is shown)
-        if (!_suppressRightClickCancelOnce &&
-            Event.current.type == EventType.MouseDown &&
-            Event.current.button == 1)
+        // Right-click on empty canvas: cancel any pending connection, then open "Create Node" menu.
+        if (Event.current.type == EventType.MouseDown &&
+            Event.current.button == 1 &&
+            !IsMouseOverAnyNode(_lastCanvasMouse))
         {
             _pending = default;
-            Repaint();
+            ShowCreateAndConnectMenu(_lastCanvasMouse);
+            Event.current.Use();
         }
-        _suppressRightClickCancelOnce = false;
 
         GUI.EndScrollView();
     }
@@ -660,20 +659,64 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private void DrawBranchNodeInline(SerializedProperty nodeProp)
     {
-        var tProp = nodeProp.FindPropertyRelative("trueNextNodeId");
-        var fProp = nodeProp.FindPropertyRelative("falseNextNodeId");
+        var tProp    = nodeProp.FindPropertyRelative("trueNextNodeId");
+        var fProp    = nodeProp.FindPropertyRelative("falseNextNodeId");
+        var condProp = nodeProp.FindPropertyRelative("condition");
 
-        GUILayout.Space(6);
+        // Show a one-line condition summary so the node is readable without opening the inspector
+        if (condProp != null)
+        {
+            string summary = BuildConditionSummary(condProp);
+            var oldC = GUI.contentColor;
+            GUI.contentColor = new Color(0.85f, 0.85f, 0.60f);
+            GUILayout.Label(summary, EditorStyles.miniLabel);
+            GUI.contentColor = oldC;
+        }
 
-        DrawOutputRow(nodeProp, "True", "True", tProp.stringValue, () =>
+        GUILayout.Space(4);
+
+        DrawOutputRow(nodeProp, "True ✓", "True", tProp.stringValue, () =>
         {
             CreateEndAndConnect(nodeProp, "True");
         });
 
-        DrawOutputRow(nodeProp, "False", "False", fProp.stringValue, () =>
+        DrawOutputRow(nodeProp, "False ✗", "False", fProp.stringValue, () =>
         {
             CreateEndAndConnect(nodeProp, "False");
         });
+    }
+
+    private static string BuildConditionSummary(SerializedProperty condProp)
+    {
+        // condProp is a DialogueConditionGroup (has 'all' list inside)
+        var allProp = condProp.FindPropertyRelative("all");
+        if (allProp == null || allProp.arraySize == 0)
+            return "if: <no condition set>";
+
+        if (allProp.arraySize == 1)
+            return "if: " + SingleConditionLabel(allProp.GetArrayElementAtIndex(0));
+
+        return $"if: {allProp.arraySize} conditions (all must pass)";
+    }
+
+    private static string SingleConditionLabel(SerializedProperty c)
+    {
+        var typeProp = c.FindPropertyRelative("type");
+        if (typeProp == null) return "?";
+        var type = (DialogueConditionType)typeProp.intValue;
+        int intVal = c.FindPropertyRelative("intValue")?.intValue ?? 0;
+        return type switch
+        {
+            DialogueConditionType.MoneyAtLeast       => $"Money ≥ {intVal}",
+            DialogueConditionType.InfluenceAtLeast   => $"Influence ≥ {intVal}",
+            DialogueConditionType.StrategyAtLeast    => $"Strategy ≥ {intVal}",
+            DialogueConditionType.NetworkingAtLeast  => $"Networking ≥ {intVal}",
+            DialogueConditionType.ReputationAtLeast  => $"Reputation ≥ {intVal}",
+            DialogueConditionType.TimeOfDayIs        =>
+                $"Time = {(TimeOfDay)(c.FindPropertyRelative("timeOfDayValue")?.intValue ?? 0)}",
+            DialogueConditionType.FlagIsTrue         => $"Flag '{c.FindPropertyRelative("flagId")?.stringValue ?? "?"}' is true",
+            _                                        => type.ToString()
+        };
     }
 
     private void DrawCommandNodeInline(SerializedProperty nodeProp)
@@ -681,9 +724,7 @@ public class DialogueGraphEditorWindow : EditorWindow
         var cmdsProp = nodeProp.FindPropertyRelative("commands");
         var nextProp = nodeProp.FindPropertyRelative("nextNodeId");
 
-        //GUILayout.Label($"Commands: {cmdsProp.arraySize}", EditorStyles.miniBoldLabel);
-        //GUILayout.Label("(edit commands in inspector)", EditorStyles.miniLabel);
-
+        GUILayout.Label($"Commands: {cmdsProp.arraySize}", EditorStyles.miniBoldLabel);
         GUILayout.Space(6);
 
         DrawOutputRow(nodeProp, "Next", "Next", nextProp.stringValue, () =>
@@ -1139,13 +1180,16 @@ private void CompleteConnection(string targetNodeId)
         Vector2 srcPos = sourceNodeProp.FindPropertyRelative("editorPosition").vector2Value;
         Vector2 endPos = srcPos + new Vector2(NodeWidth + 80f, 20f);
 
-        // create end
+        // Create end — use safe SerializeReference pattern: grow, null, apply, assign, apply.
         EnsureSerialized();
         int idx = _nodesProp.arraySize;
-        _nodesProp.InsertArrayElementAtIndex(idx);
+        _nodesProp.arraySize++;
+        _nodesProp.GetArrayElementAtIndex(idx).managedReferenceValue = null;
+        ApplyModified();
 
-        var newElem = _nodesProp.GetArrayElementAtIndex(idx);
+        EnsureSerialized();
         string guid = Guid.NewGuid().ToString("N");
+        var newElem = _nodesProp.GetArrayElementAtIndex(idx);
         newElem.managedReferenceValue = new EndNode(guid);
         ApplyModified();
 
@@ -1177,7 +1221,10 @@ private void CompleteConnection(string targetNodeId)
     private void DuplicateChoice(SerializedProperty choicesProp, int index)
     {
         choicesProp.InsertArrayElementAtIndex(index + 1);
+        // InsertArrayElementAtIndex clones the element — clear the connection so the
+        // duplicate doesn't silently share the same target as the original.
         var duplicated = choicesProp.GetArrayElementAtIndex(index + 1);
+        duplicated.FindPropertyRelative("nextNodeId").stringValue = "";
     }
 
     private void AutoEndDanglingChoiceLinks(SerializedProperty choiceNodeProp)
@@ -1315,12 +1362,27 @@ private void CompleteConnection(string targetNodeId)
         }
         else
         {
-            Debug.LogWarning($"DialogueGraph '{_graph.name}' validation found {errors.Count} issue(s):\n- " + string.Join("\n- ", errors));
-            EditorUtility.DisplayDialog("Dialogue Validation", $"Found {errors.Count} issue(s). Check Console for details.", "OK");
+            string detail = string.Join("\n• ", errors);
+            EditorUtility.DisplayDialog("Dialogue Validation",
+                $"Found {errors.Count} issue(s):\n• {detail}", "OK");
         }
     }
 
     // ---------------- Helpers ----------------
+    private void CreateNewGraph()
+    {
+        string path = EditorUtility.SaveFilePanelInProject(
+            "Create Dialogue Graph", "DialogueGraph_New", "asset",
+            "Choose where to save the dialogue graph", "Assets/ScriptableObjects");
+        if (string.IsNullOrEmpty(path)) return;
+
+        var asset = CreateInstance<DialogueGraph>();
+        AssetDatabase.CreateAsset(asset, path);
+        AssetDatabase.SaveAssets();
+        SetGraph(asset);
+        EditorGUIUtility.PingObject(asset);
+    }
+
     private void SetGraph(DialogueGraph graph)
     {
         _graph = graph;
@@ -1495,17 +1557,27 @@ private void CompleteConnection(string targetNodeId)
 
         var list = new List<string> { "Player" };
 
-        // Finding scene objects is relatively expensive – do it rarely.
+        // Prefer live NpcManager (play mode); fall back to asset scan in edit mode.
         var mgr = UnityEngine.Object.FindFirstObjectByType<NpcManager>();
         if (mgr != null)
         {
-            // If your GetAllSpeakerIds already includes Player, still safe
             var ids = mgr.GetAllSpeakerIds();
             for (int i = 0; i < ids.Count; i++)
             {
                 var s = ids[i];
                 if (!string.IsNullOrWhiteSpace(s) && !list.Contains(s))
                     list.Add(s);
+            }
+        }
+
+        if (list.Count == 1) // only "Player" — NpcManager not available, scan assets
+        {
+            foreach (var guid in AssetDatabase.FindAssets("t:NpcDefinition"))
+            {
+                var def = AssetDatabase.LoadAssetAtPath<NpcDefinition>(
+                    AssetDatabase.GUIDToAssetPath(guid));
+                if (def != null && !string.IsNullOrWhiteSpace(def.NpcId) && !list.Contains(def.NpcId))
+                    list.Add(def.NpcId);
             }
         }
 
