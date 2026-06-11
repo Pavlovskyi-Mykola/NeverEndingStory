@@ -30,32 +30,14 @@ public static class DialogueSelector
 
     private static DialogueGraph ResolveRule(DialogueSelectorRule rule, DialogueSelectorContext ctx)
     {
-        switch (rule.kind)
+        switch (rule.output)
         {
-            case DialogueRuleKind.IntroIfNotSeen:
-                return ResolveIntro(rule);
-
-            case DialogueRuleKind.SpecialIfCondition:
-                return rule.graph;
-
-            case DialogueRuleKind.RepeatablePool:
+            case DialogueRuleOutput.Pool:
                 return PickFromPool(rule, ctx);
 
-            default:
-                return null;
+            default: // SingleGraph, and legacy int-0 IntroIfNotSeen assets
+                return rule.graph;
         }
-    }
-
-    private static DialogueGraph ResolveIntro(DialogueSelectorRule rule)
-    {
-        if (rule.graph == null)
-            return null;
-
-        var journal = DialogueJournal.Instance;
-        if (journal != null && journal.HasSeenDialogue(rule.graph.DialogueId))
-            return null;
-
-        return rule.graph;
     }
 
     private static DialogueGraph PickFromPool(DialogueSelectorRule rule, DialogueSelectorContext ctx)

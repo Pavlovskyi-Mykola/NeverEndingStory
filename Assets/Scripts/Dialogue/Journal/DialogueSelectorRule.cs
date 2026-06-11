@@ -1,11 +1,11 @@
 using System;
 using UnityEngine;
 
-public enum DialogueRuleKind
+public enum DialogueRuleOutput
 {
-    IntroIfNotSeen,
-    SpecialIfCondition,
-    RepeatablePool
+    // int 1 preserves data for rules that were serialized as SpecialIfCondition
+    SingleGraph = 1,
+    Pool        = 2,
 }
 
 public enum DialoguePickMode
@@ -25,8 +25,9 @@ public enum QuestRouteState
 [Serializable]
 public class DialogueSelectorRule
 {
-    [Header("Rule Type")]
-    public DialogueRuleKind kind = DialogueRuleKind.SpecialIfCondition;
+    [Header("Output")]
+    [Tooltip("SingleGraph: return one graph when conditions pass. Pool: pick from the pool[] array.")]
+    public DialogueRuleOutput output = DialogueRuleOutput.SingleGraph;
 
     [Header("Graph / Pool")]
     public DialogueGraph graph;
