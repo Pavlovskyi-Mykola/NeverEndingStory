@@ -19,20 +19,44 @@ public class DialogueGraph : ScriptableObject
     public string StartNodeId => startNodeId;
     public IReadOnlyList<DialogueNode> Nodes => nodes;
 
+    private Dictionary<string, DialogueNode> _nodesById;
+
     public DialogueNode GetNode(string id)
     {
         if (string.IsNullOrEmpty(id)) return null;
-        for (int i = 0; i < nodes.Count; i++)
-            if (nodes[i] != null && nodes[i].Id == id)
-                return nodes[i];
-        return null;
+
+        if (_nodesById == null)
+            RebuildLookup();
+
+        return _nodesById.TryGetValue(id, out var node) ? node : null;
     }
 
     public bool HasNode(string id) => GetNode(id) != null;
 
+    private void RebuildLookup()
+    {
+        _nodesById = new Dictionary<string, DialogueNode>(StringComparer.Ordinal);
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var n = nodes[i];
+            if (n != null && !string.IsNullOrEmpty(n.Id))
+                _nodesById[n.Id] = n;
+        }
+    }
+
+    private void OnEnable()
+    {
+        _nodesById = null;
+    }
+
 #if UNITY_EDITOR
     private void OnValidate()
     {
+        // Graph editor edits go through SerializedObject, which triggers OnValidate —
+        // drop the lookup so it rebuilds against the new node list.
+        _nodesById = null;
+
         // Generate GUID once if missing
         if (string.IsNullOrEmpty(dialogueId))
         {

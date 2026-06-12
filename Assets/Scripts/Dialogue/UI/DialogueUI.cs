@@ -22,7 +22,7 @@ public class DialogueUI : MonoBehaviour
     [SerializeField] private Button choiceButtonPrefab;
 
     [Header("Speaker Mapping")]
-    [SerializeField] private string playerSpeakerName = "Player";
+    [SerializeField] private string playerSpeakerName = NpcManager.PlayerSpeakerId;
 
     [Header("Behavior")]
     [SerializeField] private bool clearLogOnHide = false;

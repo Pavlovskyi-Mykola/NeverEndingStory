@@ -268,6 +268,11 @@ public sealed class SaveLoadManager : MonoBehaviour
 
     public void ClearCurrentSlotAndRuntimeState()
     {
+        // A dialogue running across a reset would keep stale graph state and leave
+        // IsInDialogue stuck; abort skips trailing commands/NpcTalked on purpose.
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.AbortDialogue();
+
         DeleteSaveFile(activeSlotId);
 
         if (PlayerStatsManager.Instance != null)
@@ -373,6 +378,11 @@ public sealed class SaveLoadManager : MonoBehaviour
     {
         if (data == null)
             return;
+
+        // Abort (not Close) any running dialogue first: Close would execute trailing
+        // commands and raise NpcTalked, mutating the state we are about to restore.
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.AbortDialogue();
 
         if (PlayerStatsManager.Instance != null)
             PlayerStatsManager.Instance.RestoreState(data.playerStats);

@@ -72,16 +72,14 @@ public class DialogueRunner : MonoBehaviour
     private string _activeDialogueId;
     private bool _hasStartedJournal;
 
-    // You can later replace this with NpcManager.PlayerSpeakerId if you want
-    private const string PlayerSpeakerId = "Player";
+    // Choices shown to the UI for the current turn; Choose() must index into this
+    // exact list, not a rebuilt one (conditions may have changed since emission).
+    private List<PresentedChoice> _presentedChoices;
 
     //QUESTS related
     public static event Action<DialogueRunner> InstanceReady;
-    //public event Action<string, string> OnDialogueFinished; // (npcId, dialogueId)
     private DialogueContext _context;
     private bool _hasContext;
-    //quest new flow
-    public event Action<string> OnTalkedToNpc; // npcId
 
     private void Awake()
     {
@@ -99,6 +97,12 @@ public class DialogueRunner : MonoBehaviour
     public void StartDialogue(DialogueGraph graph, DialogueContext context)
     {
         if (graph == null) return;
+
+        if (IsRunning)
+        {
+            Debug.LogWarning($"[DialogueRunner] StartDialogue('{graph.name}') ignored — dialogue '{_activeDialogueId}' is still running.");
+            return;
+        }
 
         _context = context;
         _hasContext = !string.IsNullOrEmpty(context.NpcId) || !string.IsNullOrEmpty(context.LocationId);
@@ -144,13 +148,36 @@ public class DialogueRunner : MonoBehaviour
 
         // Cache before we clear state
         var finishedDialogueId = _activeDialogueId;
+        var npcId = _hasContext ? _context.NpcId : null;
 
-        // quest new flow - Notify systems that a talk with NPC happened
-        if (_hasContext && !string.IsNullOrEmpty(_context.NpcId))
-        {
-            GameEvents.RaiseNpcTalked(_context.NpcId, finishedDialogueId);
-            OnTalkedToNpc?.Invoke(_context.NpcId); // you can remove later if you want
-        }
+        ClearRunState();
+
+        // Notify systems that a talk with the NPC happened (after state is cleared,
+        // so listeners that start new dialogues/actions see a non-running runner).
+        if (!string.IsNullOrEmpty(npcId))
+            GameEvents.RaiseNpcTalked(npcId, finishedDialogueId);
+
+        OnDialogueStateChanged?.Invoke(false);
+        OnHideDialogue?.Invoke();
+    }
+
+    /// <summary>
+    /// Hard-stops a running dialogue without executing trailing commands, finishing
+    /// the journal, or raising NpcTalked. For save/load and new game, where those
+    /// side effects would corrupt the freshly restored state.
+    /// </summary>
+    public void AbortDialogue()
+    {
+        if (!IsRunning) return;
+
+        ClearRunState();
+
+        OnDialogueStateChanged?.Invoke(false);
+        OnHideDialogue?.Invoke();
+    }
+
+    private void ClearRunState()
+    {
         _graph = null;
         _current = null;
         _pendingCloseTraversalStartId = null;
@@ -158,15 +185,12 @@ public class DialogueRunner : MonoBehaviour
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
         _waitingForClose = false;
+        _presentedChoices = null;
         IsAdvancing = false;
         _activeDialogueId = null;
         _hasStartedJournal = false;
-        //quest related
         _context = default;
         _hasContext = false;
-
-        OnDialogueStateChanged?.Invoke(false);
-        OnHideDialogue?.Invoke();
     }
 
     public void CloseDialogue()
@@ -239,7 +263,10 @@ public class DialogueRunner : MonoBehaviour
         if (IsAdvancing) return;
         if (!(_current is ChoiceNode choiceNode)) return;
 
-        var presented = BuildPresentedChoices(choiceNode);
+        // Index into the exact list the UI was built from. Rebuilding here could
+        // re-evaluate conditions and silently map the index to a different choice.
+        var presented = _presentedChoices;
+        if (presented == null) return;
         if (presentedChoiceIndex < 0 || presentedChoiceIndex >= presented.Count) return;
 
         var chosen = presented[presentedChoiceIndex];
@@ -278,6 +305,7 @@ public class DialogueRunner : MonoBehaviour
         _replyLineNodeId = null;
         _waitingForClose = false;
         _pendingCloseTraversalStartId = null;
+        _presentedChoices = null;
 
         var first = TraverseExecuting(startNodeId, out var endReason);
         if (endReason == EndReason.End || first == null)
@@ -357,7 +385,8 @@ public class DialogueRunner : MonoBehaviour
             var cn = (ChoiceNode)first;
             turn.HasNpcLine = false;
             turn.Action = DialogueTurnAction.Choices;
-            turn.Choices = BuildPresentedChoices(cn);
+            _presentedChoices = BuildPresentedChoices(cn);
+            turn.Choices = _presentedChoices;
         }
         else
         {
@@ -372,17 +401,15 @@ public class DialogueRunner : MonoBehaviour
 
     private void EmitCloseTurn()
     {
+        // If already stopped, don't emit anything
         if (!IsRunning)
-        {
-            // If already stopped, don't emit anything
-            //StopDialogue();
             return;
-        }
 
         _waitingForPlayerReply = false;
         _replyTraversalStartId = null;
         _replyLineNodeId = null;
         _pendingCloseTraversalStartId = null;
+        _presentedChoices = null;
         _waitingForClose = true;
         IsAdvancing = false;
 
@@ -406,10 +433,15 @@ public class DialogueRunner : MonoBehaviour
     }
 
     // -----------------------------
-    // Traversal (executing)
+    // Traversal (shared by executing advance and non-executing peek)
     // -----------------------------
 
-    private DialogueNode TraverseExecuting(string startId, out EndReason endReason)
+    /// <summary>
+    /// Walks Command/Branch/End nodes from startId until reaching a Line or Choice
+    /// node (returned) or an end (null + EndReason.End). When execute is true,
+    /// Command nodes run their commands; Branch conditions are evaluated either way.
+    /// </summary>
+    private DialogueNode Traverse(string startId, bool execute, out EndReason endReason)
     {
         endReason = EndReason.None;
 
@@ -423,8 +455,12 @@ public class DialogueRunner : MonoBehaviour
                 case DialogueNodeType.Command:
                     {
                         var cmd = (CommandNode)node;
-                        for (int i = 0; i < cmd.Commands.Count; i++)
-                            cmd.Commands[i].Execute();
+
+                        if (execute)
+                        {
+                            for (int i = 0; i < cmd.Commands.Count; i++)
+                                cmd.Commands[i].Execute();
+                        }
 
                         if (string.IsNullOrEmpty(cmd.NextNodeId))
                         {
@@ -471,11 +507,14 @@ public class DialogueRunner : MonoBehaviour
         return null;
     }
 
+    private DialogueNode TraverseExecuting(string startId, out EndReason endReason) =>
+        Traverse(startId, execute: true, out endReason);
+
     // -----------------------------
     // Peek (non-executing)
     // -----------------------------
 
-    private enum NextPeekKind { None, NpcLine, PlayerLine, Choice, End }
+    private enum NextPeekKind { NpcLine, PlayerLine, Choice, End }
 
     private struct NextPeekInfo
     {
@@ -487,63 +526,24 @@ public class DialogueRunner : MonoBehaviour
 
     private NextPeekInfo PeekNextInput(string startId)
     {
-        if (string.IsNullOrEmpty(startId))
+        var node = Traverse(startId, execute: false, out _);
+
+        if (node == null)
             return new NextPeekInfo { Kind = NextPeekKind.End };
 
-        var safety = 0;
-        var node = _graph.GetNode(startId);
+        if (node.NodeType == DialogueNodeType.Choice)
+            return new NextPeekInfo { Kind = NextPeekKind.Choice };
 
-        while (node != null && safety++ < 256)
+        var ln = (LineNode)node;
+        bool isPlayer = IsPlayerSpeakerId(ln.Speaker);
+
+        return new NextPeekInfo
         {
-            switch (node.NodeType)
-            {
-                case DialogueNodeType.Line:
-                    {
-                        var ln = (LineNode)node;
-                        bool isPlayer = IsPlayerSpeakerId(ln.Speaker);
-                        return new NextPeekInfo
-                        {
-                            Kind = isPlayer ? NextPeekKind.PlayerLine : NextPeekKind.NpcLine,
-                            NodeId = ln.Id,
-                            Speaker = ln.Speaker,
-                            Text = ln.Text
-                        };
-                    }
-
-                case DialogueNodeType.Choice:
-                    return new NextPeekInfo { Kind = NextPeekKind.Choice };
-
-                case DialogueNodeType.End:
-                    return new NextPeekInfo { Kind = NextPeekKind.End };
-
-                case DialogueNodeType.Command:
-                    {
-                        var cmd = (CommandNode)node;
-                        if (string.IsNullOrEmpty(cmd.NextNodeId))
-                            return new NextPeekInfo { Kind = NextPeekKind.End };
-                        node = _graph.GetNode(cmd.NextNodeId);
-                        break;
-                    }
-
-                case DialogueNodeType.Branch:
-                    {
-                        var bn = (BranchNode)node;
-                        bool result = bn.Condition == null || bn.Condition.Evaluate();
-                        var next = result ? bn.TrueNextNodeId : bn.FalseNextNodeId;
-
-                        if (string.IsNullOrEmpty(next))
-                            return new NextPeekInfo { Kind = NextPeekKind.End };
-
-                        node = _graph.GetNode(next);
-                        break;
-                    }
-
-                default:
-                    return new NextPeekInfo { Kind = NextPeekKind.None };
-            }
-        }
-
-        return new NextPeekInfo { Kind = NextPeekKind.None };
+            Kind = isPlayer ? NextPeekKind.PlayerLine : NextPeekKind.NpcLine,
+            NodeId = ln.Id,
+            Speaker = ln.Speaker,
+            Text = ln.Text
+        };
     }
 
     private static List<PresentedChoice> BuildPresentedChoices(ChoiceNode cn)
@@ -568,7 +568,7 @@ public class DialogueRunner : MonoBehaviour
     private bool IsPlayerSpeakerId(string speaker)
     {
         if (string.IsNullOrWhiteSpace(speaker)) return false;
-        return string.Equals(speaker.Trim(), PlayerSpeakerId, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(speaker.Trim(), NpcManager.PlayerSpeakerId, StringComparison.OrdinalIgnoreCase);
     }
 
     // -----------------------------

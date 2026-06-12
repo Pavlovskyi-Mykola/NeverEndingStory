@@ -53,18 +53,38 @@ public class GameManager : MonoBehaviour
 
     private void OnEnable()
     {
+        // InstanceReady covers the case where the singletons wake up after us;
+        // checking Instance covers the case where they woke up first.
+        TimeManager.InstanceReady += HandleTimeManagerReady;
         if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
+            HandleTimeManagerReady(TimeManager.Instance);
+
+        DialogueRunner.InstanceReady += HandleDialogueRunnerReady;
         if (DialogueRunner.Instance != null)
-            DialogueRunner.Instance.OnDialogueStateChanged += HandleDialogueState;
+            HandleDialogueRunnerReady(DialogueRunner.Instance);
     }
 
     private void OnDisable()
     {
+        TimeManager.InstanceReady -= HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+
+        DialogueRunner.InstanceReady -= HandleDialogueRunnerReady;
         if (DialogueRunner.Instance != null)
             DialogueRunner.Instance.OnDialogueStateChanged -= HandleDialogueState;
+    }
+
+    private void HandleTimeManagerReady(TimeManager tm)
+    {
+        tm.OnTimeChanged -= HandleTimeChanged;
+        tm.OnTimeChanged += HandleTimeChanged;
+    }
+
+    private void HandleDialogueRunnerReady(DialogueRunner runner)
+    {
+        runner.OnDialogueStateChanged -= HandleDialogueState;
+        runner.OnDialogueStateChanged += HandleDialogueState;
     }
 
     private async void Start()
