@@ -8,9 +8,6 @@ public class ActionService : MonoBehaviour
 
     public event Action OnActionStateChanged;
 
-    // Enum.GetValues allocates a boxed array on every call; CanExecute runs per
-    // button per state change, so cache it once.
-    private static readonly StatType[] StatTypes = (StatType[])Enum.GetValues(typeof(StatType));
 
     private void Awake()
     {
@@ -119,9 +116,9 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < StatTypes.Length; i++)
+        for (int i = 0; i < StatTypes.All.Length; i++)
         {
-            var stat = StatTypes[i];
+            var stat = StatTypes.All[i];
             if (stats.Get(stat) < action.GetRequirement(stat))
             {
                 reason = StatToFailReason(stat);
@@ -200,9 +197,9 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < StatTypes.Length; i++)
+        for (int i = 0; i < StatTypes.All.Length; i++)
         {
-            var stat = StatTypes[i];
+            var stat = StatTypes.All[i];
             int reward = action.GetReward(stat);
             if (reward > 0) stats.Add(stat, reward);
         }

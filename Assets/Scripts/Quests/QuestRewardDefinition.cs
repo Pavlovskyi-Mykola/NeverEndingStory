@@ -38,10 +38,10 @@ public sealed class QuestRewardDefinition
         var stats = PlayerStatsManager.Instance;
         if (stats != null)
         {
-            foreach (StatType stat in System.Enum.GetValues(typeof(StatType)))
+            for (int i = 0; i < StatTypes.All.Length; i++)
             {
-                int amount = GetReward(stat);
-                if (amount != 0) stats.Add(stat, amount);
+                int amount = GetReward(StatTypes.All[i]);
+                if (amount != 0) stats.Add(StatTypes.All[i], amount);
             }
         }
 

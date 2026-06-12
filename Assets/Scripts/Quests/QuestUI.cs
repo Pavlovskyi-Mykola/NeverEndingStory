@@ -25,7 +25,15 @@ public sealed class QuestUI : MonoBehaviour
     [SerializeField] private bool showCompletedInList = false;
 
     private readonly List<QuestListItemUI> _spawned = new();
-    private string _selectedQuestId;
+
+    // Tracking state lives in QuestJournal (persisted in saves); the UI only reflects it.
+    private string TrackedQuestId => QuestJournal.Instance != null ? QuestJournal.Instance.TrackedQuestId : null;
+
+    // View-only selection: lets the player read details of quests that can't be
+    // tracked (completed ones). Transient — cleared when the journal closes, so
+    // the HUD tracker panel (which shares the details texts) reverts to the
+    // tracked quest.
+    private string _viewedQuestId;
 
     private void OnEnable()
     {
@@ -33,6 +41,11 @@ public sealed class QuestUI : MonoBehaviour
 
         if (QuestManager.Instance != null)
             HandleQuestManagerReady(QuestManager.Instance);
+
+        QuestJournal.InstanceReady += HandleQuestJournalReady;
+
+        if (QuestJournal.Instance != null)
+            HandleQuestJournalReady(QuestJournal.Instance);
 
         if (openJournalButton != null)
         {
@@ -59,6 +72,11 @@ public sealed class QuestUI : MonoBehaviour
         if (QuestManager.Instance != null)
             QuestManager.Instance.OnQuestStateChanged -= HandleQuestStateChanged;
 
+        QuestJournal.InstanceReady -= HandleQuestJournalReady;
+
+        if (QuestJournal.Instance != null)
+            QuestJournal.Instance.OnTrackedQuestChanged -= HandleQuestStateChanged;
+
         if (openJournalButton != null)
             openJournalButton.onClick.RemoveListener(OpenJournal);
 
@@ -70,6 +88,13 @@ public sealed class QuestUI : MonoBehaviour
     {
         qm.OnQuestStateChanged -= HandleQuestStateChanged;
         qm.OnQuestStateChanged += HandleQuestStateChanged;
+    }
+
+    private void HandleQuestJournalReady(QuestJournal journal)
+    {
+        journal.OnTrackedQuestChanged -= HandleQuestStateChanged;
+        journal.OnTrackedQuestChanged += HandleQuestStateChanged;
+        Refresh();
     }
 
     private void HandleQuestStateChanged()
@@ -87,6 +112,13 @@ public sealed class QuestUI : MonoBehaviour
     {
         if (journalPanel != null)
             journalPanel.SetActive(false);
+
+        // Drop any view-only selection so the details/tracker shows the tracked quest again.
+        if (!string.IsNullOrEmpty(_viewedQuestId))
+        {
+            _viewedQuestId = null;
+            Refresh();
+        }
     }
 
     public void ToggleJournal()
@@ -116,15 +148,19 @@ public sealed class QuestUI : MonoBehaviour
 
         if (ids.Count == 0)
         {
-            _selectedQuestId = null;
+            _viewedQuestId = null;
             SetDetails("", "");
             return;
         }
 
-        // If tracked quest is no longer active/completed-visible, stop tracking it.
-        // Do NOT automatically switch to another quest.
-        if (!string.IsNullOrEmpty(_selectedQuestId) && !ids.Contains(_selectedQuestId))
-            _selectedQuestId = null;
+        // Drop a view-only selection that left the list (e.g. hidden by options).
+        if (!string.IsNullOrEmpty(_viewedQuestId) && !ids.Contains(_viewedQuestId))
+            _viewedQuestId = null;
+
+        // View-only selection wins while it exists; otherwise show the tracked
+        // quest. Tracking consistency lives in QuestJournal: it clears the
+        // tracked id when the quest completes or is no longer active.
+        string shownId = !string.IsNullOrEmpty(_viewedQuestId) ? _viewedQuestId : TrackedQuestId;
 
         if (listParent != null && listItemPrefab != null)
         {
@@ -134,13 +170,13 @@ public sealed class QuestUI : MonoBehaviour
                 string title = GetQuestTitle(qm, questId);
 
                 var item = Instantiate(listItemPrefab, listParent);
-                bool isSelected = questId == _selectedQuestId;
+                bool isSelected = questId == shownId;
                 item.Bind(questId, title, OnQuestClicked, isSelected);
                 _spawned.Add(item);
             }
         }
 
-        ShowDetails(_selectedQuestId);
+        ShowDetails(shownId);
     }
 
     private void OnQuestClicked(string questId)
@@ -148,17 +184,24 @@ public sealed class QuestUI : MonoBehaviour
         if (string.IsNullOrEmpty(questId))
             return;
 
-        // Toggle tracking
-        if (_selectedQuestId == questId)
-            _selectedQuestId = null;
+        var journal = QuestJournal.Instance;
+
+        if (journal != null && journal.IsActive(questId))
+        {
+            // Active quest: toggle tracking; OnTrackedQuestChanged triggers Refresh.
+            _viewedQuestId = null;
+            journal.ToggleTrackedQuest(questId);
+
+            if (closeJournalAfterSelection)
+                CloseJournal();
+        }
         else
-            _selectedQuestId = questId;
-
-        ShowDetails(_selectedQuestId);
-        Refresh();
-
-        if (closeJournalAfterSelection)
-            CloseJournal();
+        {
+            // Completed (or otherwise untrackable) quest: view-only details.
+            // Keep the journal open — the player is reading, not selecting.
+            _viewedQuestId = _viewedQuestId == questId ? null : questId;
+            Refresh();
+        }
     }
 
     private void ShowDetails(string questId)

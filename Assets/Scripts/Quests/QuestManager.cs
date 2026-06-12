@@ -121,9 +121,10 @@ public sealed class QuestManager : MonoBehaviour
             var questId = snapshot[i];
             if (!Journal.IsActive(questId)) continue;
 
-            changed |= TryAdvanceQuest(questId);
+            changed |= AdvanceQuestNoNotify(questId);
         }
 
+        // One event per batch — subscribers like QuestUI fully rebuild on it.
         if (changed)
             OnQuestStateChanged?.Invoke();
     }
@@ -149,17 +150,31 @@ public sealed class QuestManager : MonoBehaviour
         Journal.MarkStarted(questId);
 
         var prog = Journal.GetOrCreateProgress(questId);
-        prog.CurrentStepIndex = Mathf.Clamp(prog.CurrentStepIndex, 0, def.Steps.Count - 1);
+        prog.CurrentStepIndex = 0;
         prog.ManualStepCompleted = false;
         prog.CompletionRewardsGranted = false;
 
-        TryAdvanceQuest(questId);
+        // Talks that happened before this quest existed must not satisfy its
+        // TalkToDialogue steps — consume the current token up front.
+        prog.LastConsumedTalkToken = _talkToken;
+
+        AdvanceQuestNoNotify(questId);
 
         OnQuestStateChanged?.Invoke();
         return true;
     }
 
     public bool TryAdvanceQuest(string questId)
+    {
+        bool changed = AdvanceQuestNoNotify(questId);
+
+        if (changed)
+            OnQuestStateChanged?.Invoke();
+
+        return changed;
+    }
+
+    private bool AdvanceQuestNoNotify(string questId)
     {
         if (!TryGetDefAndProg(questId, out var def, out var prog)) return false;
         if (!Journal.IsActive(questId)) return false;
@@ -170,6 +185,7 @@ public sealed class QuestManager : MonoBehaviour
         {
             if (prog.CurrentStepIndex >= def.Steps.Count)
             {
+                GrantCompletionRewards(def, prog);
                 Journal.MarkCompleted(questId);
                 changed = true;
                 break;
@@ -209,9 +225,6 @@ public sealed class QuestManager : MonoBehaviour
                 break;
             }
         }
-
-        if (changed)
-            OnQuestStateChanged?.Invoke();
 
         return changed;
     }
