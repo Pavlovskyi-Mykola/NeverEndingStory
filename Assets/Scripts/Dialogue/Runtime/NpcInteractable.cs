@@ -14,6 +14,9 @@ public class NpcInteractable : MonoBehaviour
         if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
             return;
 
+        if (UIPanelManager.IsGameplayBlocked)
+            return;
+
         if (_launcher == null)
         {
             Debug.LogError("[NpcInteractable] Missing NpcDialogueLauncher component on NPC prefab.");

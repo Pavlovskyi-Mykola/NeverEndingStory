@@ -13,7 +13,8 @@ public enum ActionFailReason
     NotEnoughNetworking,
     NotEnoughReputation,
     MissingRequiredItem,
-    MissingCostItem
+    MissingCostItem,
+    BlockedByUI
 }
 
 public enum TimeSkipMode

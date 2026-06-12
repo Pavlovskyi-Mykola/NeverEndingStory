@@ -22,11 +22,18 @@ public class ActionService : MonoBehaviour
     private void OnEnable()
     {
         GameEvents.InventoryChanged += HandleInventoryChanged;
+        UIPanelManager.GameplayBlockedChanged += HandleGameplayBlockedChanged;
     }
 
     private void OnDisable()
     {
         GameEvents.InventoryChanged -= HandleInventoryChanged;
+        UIPanelManager.GameplayBlockedChanged -= HandleGameplayBlockedChanged;
+    }
+
+    private void HandleGameplayBlockedChanged(bool blocked)
+    {
+        NotifyStateChanged();
     }
 
     private void HandleInventoryChanged(GameEvents.InventoryChange _)
@@ -45,6 +52,12 @@ public class ActionService : MonoBehaviour
         if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
         {
             reason = ActionFailReason.BlockedByDialogue;
+            return false;
+        }
+
+        if (UIPanelManager.IsGameplayBlocked)
+        {
+            reason = ActionFailReason.BlockedByUI;
             return false;
         }
 

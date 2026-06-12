@@ -18,6 +18,11 @@ public class NpcDialogueLauncher : MonoBehaviour
         if (GameManager.Instance != null && GameManager.Instance.IsInDialogue)
             return;
 
+        // NPC prefabs invoke this directly from their Button OnClick, so the
+        // gameplay-block check in NpcInteractable.Talk is bypassed — guard here too.
+        if (UIPanelManager.IsGameplayBlocked)
+            return;
+
         if (DialogueRunner.Instance == null) return;
         if (_routes == null) return;
 
