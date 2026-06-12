@@ -700,7 +700,7 @@ public class QuestEditorWindow : EditorWindow
             if (string.IsNullOrWhiteSpace(flagId))
                 return "Required flag is not set.";
             if (!WorldFlagEditorUtility.IsKnownFlag(flagId))
-                return $"Flag '{flagId}' is not declared in WorldFlags.cs. Typo?";
+                return $"Flag '{flagId}' is not declared in the FlagDatabase. Typo?";
         }
 
         return null;

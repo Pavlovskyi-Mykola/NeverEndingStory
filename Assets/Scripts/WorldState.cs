@@ -85,7 +85,7 @@ public class WorldState : MonoBehaviour
 
 #if UNITY_EDITOR
         if (!WorldFlags.IsKnown(key))
-            Debug.LogWarning($"[WorldState] Setting flag '{key}' which is not declared in WorldFlags.cs — possible typo in dialogue/quest data.");
+            Debug.LogWarning($"[WorldState] Setting flag '{key}' which is not declared in the FlagDatabase asset — possible typo in dialogue/quest data.");
 #endif
 
         _flags[key] = value;

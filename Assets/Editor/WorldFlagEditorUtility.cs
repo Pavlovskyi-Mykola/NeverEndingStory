@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Linq;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,40 +16,20 @@ public static class WorldFlagEditorUtility
 
         _lastRefreshTime = now;
 
-        var flags = new List<string>();
-        CollectConstStringsRecursive(typeof(WorldFlags), flags);
+        var db = FlagDatabase.Instance;
+        if (db == null)
+        {
+            _cachedFlags = Array.Empty<string>();
+            return _cachedFlags;
+        }
 
-        _cachedFlags = flags
-            .Where(s => !string.IsNullOrWhiteSpace(s))
+        _cachedFlags = db.GetAllFlagIds()
+            .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(s => s, StringComparer.Ordinal)
             .ToArray();
 
         return _cachedFlags;
-    }
-
-    private static void CollectConstStringsRecursive(Type type, List<string> results)
-    {
-        if (type == null) return;
-
-        const BindingFlags bindingFlags =
-            BindingFlags.Public |
-            BindingFlags.NonPublic |
-            BindingFlags.Static |
-            BindingFlags.FlattenHierarchy;
-
-        foreach (var field in type.GetFields(bindingFlags))
-        {
-            if (field.FieldType != typeof(string)) continue;
-            if (!field.IsLiteral || field.IsInitOnly) continue;
-
-            object raw = field.GetRawConstantValue();
-            if (raw is string s && !string.IsNullOrWhiteSpace(s))
-                results.Add(s);
-        }
-
-        foreach (var nested in type.GetNestedTypes(bindingFlags))
-            CollectConstStringsRecursive(nested, results);
     }
 
     public static int GetIndexOf(string currentValue, string[] options)
@@ -83,6 +61,51 @@ public static class WorldFlagEditorUtility
             return "<None>";
 
         return flagId;
+    }
+
+    /// <summary>Returns the FlagDatabase asset, offering to create one when none exists yet.</summary>
+    public static FlagDatabase GetOrCreateDatabase()
+    {
+        var db = FlagDatabase.Instance;
+        if (db != null) return db;
+
+        if (!EditorUtility.DisplayDialog("Flag Database missing",
+                "No FlagDatabase asset exists yet. Create one at Assets/ScriptableObjects/FlagDatabase.asset?",
+                "Create", "Cancel"))
+            return null;
+
+        if (!AssetDatabase.IsValidFolder("Assets/ScriptableObjects"))
+            AssetDatabase.CreateFolder("Assets", "ScriptableObjects");
+
+        db = ScriptableObject.CreateInstance<FlagDatabase>();
+        db.SeedDefaultTemplates();
+        AssetDatabase.CreateAsset(db, "Assets/ScriptableObjects/FlagDatabase.asset");
+        AssetDatabase.SaveAssets();
+        return db;
+    }
+
+    /// <summary>Adds a flag id to the FlagDatabase (creating the asset if needed). Returns true when the id is usable afterwards.</summary>
+    public static bool AddFlagToDatabase(string flagId)
+    {
+        if (string.IsNullOrWhiteSpace(flagId))
+            return false;
+
+        var db = GetOrCreateDatabase();
+        if (db == null)
+            return false;
+
+        if (db.IsKnown(flagId.Trim()))
+            return true; // already there — still fine to assign
+
+        Undo.RecordObject(db, "Add World Flag");
+
+        if (!db.AddFlagEditor(flagId))
+            return false;
+
+        EditorUtility.SetDirty(db);
+        AssetDatabase.SaveAssetIfDirty(db);
+        _cachedFlags = null; // force picker refresh
+        return true;
     }
 
     public static void DrawFlagField(Rect rect, SerializedProperty stringProp, GUIContent label)

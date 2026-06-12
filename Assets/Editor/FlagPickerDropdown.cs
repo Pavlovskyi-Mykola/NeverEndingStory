@@ -8,6 +8,7 @@ using UnityEngine;
 public sealed class FlagPickerDropdown : AdvancedDropdown
 {
     private readonly Action<string> _onSelected;
+    private readonly Action _onAddNew;
     private readonly string _currentValue;
     private readonly string[] _flags;
 
@@ -21,12 +22,22 @@ public sealed class FlagPickerDropdown : AdvancedDropdown
         }
     }
 
-    private FlagPickerDropdown(AdvancedDropdownState state, string[] flags, string currentValue, Action<string> onSelected)
+    private sealed class AddNewItem : AdvancedDropdownItem
+    {
+        public AddNewItem() : base("＋ Add new flag…")
+        {
+            icon = EditorGUIUtility.IconContent("CreateAddNew").image as Texture2D;
+        }
+    }
+
+    private FlagPickerDropdown(AdvancedDropdownState state, string[] flags, string currentValue,
+        Action<string> onSelected, Action onAddNew)
         : base(state)
     {
         _flags = flags ?? Array.Empty<string>();
         _currentValue = currentValue ?? string.Empty;
         _onSelected = onSelected;
+        _onAddNew = onAddNew;
 
         minimumSize = new Vector2(320f, 360f);
     }
@@ -40,34 +51,49 @@ public sealed class FlagPickerDropdown : AdvancedDropdown
         string currentValue = property.stringValue;
 
         var state = new AdvancedDropdownState();
-        var dropdown = new FlagPickerDropdown(state, WorldFlagEditorUtility.GetAllFlags(), currentValue, selectedFlag =>
-        {
-            if (so == null || so.targetObject == null)
-                return;
-
-            so.Update();
-
-            var prop = so.FindProperty(propertyPath);
-            if (prop != null)
+        var dropdown = new FlagPickerDropdown(
+            state,
+            WorldFlagEditorUtility.GetAllFlags(),
+            currentValue,
+            selectedFlag => ApplyToProperty(so, propertyPath, selectedFlag),
+            () => NewFlagPromptWindow.Open(currentValue, newId =>
             {
-                prop.stringValue = selectedFlag;
-                so.ApplyModifiedProperties();
-                EditorUtility.SetDirty(so.targetObject);
-            }
-        });
+                if (WorldFlagEditorUtility.AddFlagToDatabase(newId))
+                    ApplyToProperty(so, propertyPath, newId.Trim());
+            }));
 
         dropdown.Show(buttonRect);
+    }
+
+    private static void ApplyToProperty(SerializedObject so, string propertyPath, string value)
+    {
+        if (so == null || so.targetObject == null)
+            return;
+
+        so.Update();
+
+        var prop = so.FindProperty(propertyPath);
+        if (prop != null)
+        {
+            prop.stringValue = value;
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(so.targetObject);
+        }
     }
 
     protected override AdvancedDropdownItem BuildRoot()
     {
         var root = new AdvancedDropdownItem("World Flags");
 
+        root.AddChild(new AddNewItem());
+
         if (_flags.Length == 0)
         {
-            root.AddChild(new AdvancedDropdownItem("No flags found in WorldFlags.cs"));
+            root.AddChild(new AdvancedDropdownItem("No flags in the FlagDatabase yet"));
             return root;
         }
+
+        root.AddSeparator();
 
         var categoryMap = new Dictionary<string, AdvancedDropdownItem>(StringComparer.Ordinal);
 
@@ -112,6 +138,12 @@ public sealed class FlagPickerDropdown : AdvancedDropdown
 
     protected override void ItemSelected(AdvancedDropdownItem item)
     {
+        if (item is AddNewItem)
+        {
+            _onAddNew?.Invoke();
+            return;
+        }
+
         if (item is FlagItem flagItem)
             _onSelected?.Invoke(flagItem.FlagId);
     }
