@@ -22,6 +22,9 @@ public sealed class SaveLoadManager : MonoBehaviour
     [SerializeField] private float autosaveDelay = 1.5f;
     [SerializeField] private bool autosaveOnCareerChange = true;
 
+    [Tooltip("Autosaves rotate through these slots (oldest gets overwritten) and never touch the manual slots.")]
+    [SerializeField] private string[] autosaveSlotIds = { "autosave_1", "autosave_2" };
+
     [Header("Debug")]
     [SerializeField] private bool prettyPrintJson = true;
     [SerializeField] private bool verboseLogs = true;
@@ -32,6 +35,7 @@ public sealed class SaveLoadManager : MonoBehaviour
 
     public string ActiveSlotId => activeSlotId;
     public bool IsLoading => _isLoading;
+    public IReadOnlyList<string> AutosaveSlotIds => autosaveSlotIds;
 
     private string SaveFolder => Path.Combine(Application.persistentDataPath, "Saves");
 
@@ -52,13 +56,19 @@ public sealed class SaveLoadManager : MonoBehaviour
         GameEvents.TimeChanged += HandleTimeChanged;
         GameEvents.LocationEntered += HandleLocationEntered;
 
+        // InstanceReady covers singletons that wake up after us; the Instance
+        // check covers ones that woke up first.
+        QuestManager.InstanceReady += HandleQuestManagerReady;
         if (QuestManager.Instance != null)
-            QuestManager.Instance.OnQuestStateChanged += HandleQuestStateChanged;
+            HandleQuestManagerReady(QuestManager.Instance);
 
+        QuestJournal.InstanceReady += HandleQuestJournalReady;
         if (QuestJournal.Instance != null)
-            QuestJournal.Instance.OnTrackedQuestChanged += HandleTrackedQuestChanged;
+            HandleQuestJournalReady(QuestJournal.Instance);
+
+        CareerManager.InstanceReady += HandleCareerManagerReady;
         if (CareerManager.Instance != null)
-            CareerManager.Instance.OnCareerStateChanged += HandleCareerStateChanged;
+            HandleCareerManagerReady(CareerManager.Instance);
     }
 
     private void OnDisable()
@@ -66,13 +76,35 @@ public sealed class SaveLoadManager : MonoBehaviour
         GameEvents.TimeChanged -= HandleTimeChanged;
         GameEvents.LocationEntered -= HandleLocationEntered;
 
+        QuestManager.InstanceReady -= HandleQuestManagerReady;
         if (QuestManager.Instance != null)
             QuestManager.Instance.OnQuestStateChanged -= HandleQuestStateChanged;
 
+        QuestJournal.InstanceReady -= HandleQuestJournalReady;
         if (QuestJournal.Instance != null)
             QuestJournal.Instance.OnTrackedQuestChanged -= HandleTrackedQuestChanged;
+
+        CareerManager.InstanceReady -= HandleCareerManagerReady;
         if (CareerManager.Instance != null)
             CareerManager.Instance.OnCareerStateChanged -= HandleCareerStateChanged;
+    }
+
+    private void HandleQuestManagerReady(QuestManager qm)
+    {
+        qm.OnQuestStateChanged -= HandleQuestStateChanged;
+        qm.OnQuestStateChanged += HandleQuestStateChanged;
+    }
+
+    private void HandleQuestJournalReady(QuestJournal journal)
+    {
+        journal.OnTrackedQuestChanged -= HandleTrackedQuestChanged;
+        journal.OnTrackedQuestChanged += HandleTrackedQuestChanged;
+    }
+
+    private void HandleCareerManagerReady(CareerManager career)
+    {
+        career.OnCareerStateChanged -= HandleCareerStateChanged;
+        career.OnCareerStateChanged += HandleCareerStateChanged;
     }
 
     private async void Start()
@@ -86,14 +118,55 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (_autosavePending && !_isLoading && Time.unscaledTime >= _autosaveAt)
         {
             _autosavePending = false;
-            SaveGame(activeSlotId, "autosave");
+
+            // The request was made in gameplay, but the player may have left it
+            // (quit to menu) during the delay.
+            if (IsGameplayActive())
+                SaveGame(GetNextAutosaveSlotId(), "autosave");
         }
     }
 
     private void OnApplicationQuit()
     {
-        if (saveOnApplicationQuit && !_isLoading)
-            SaveGame(activeSlotId, "quit");
+        // Quit-saves go to the autosave rotation too — quitting from the main menu
+        // (or anywhere) must never overwrite a manual slot with unwanted state.
+        if (saveOnApplicationQuit && !_isLoading && IsGameplayActive())
+            SaveGame(GetNextAutosaveSlotId(), "quit");
+    }
+
+    private static bool IsGameplayActive()
+    {
+        return GameManager.Instance != null && GameManager.Instance.IsInGameplay;
+    }
+
+    /// <summary>Autosaves rotate: first empty autosave slot, otherwise the oldest one.</summary>
+    private string GetNextAutosaveSlotId()
+    {
+        if (autosaveSlotIds == null || autosaveSlotIds.Length == 0)
+            return "autosave_1";
+
+        string oldest = null;
+        DateTime oldestTime = DateTime.MaxValue;
+
+        for (int i = 0; i < autosaveSlotIds.Length; i++)
+        {
+            string slotId = autosaveSlotIds[i];
+            if (string.IsNullOrWhiteSpace(slotId))
+                continue;
+
+            string path = GetSavePath(slotId);
+            if (!File.Exists(path))
+                return slotId;
+
+            DateTime writeTime = File.GetLastWriteTimeUtc(path);
+            if (writeTime < oldestTime)
+            {
+                oldestTime = writeTime;
+                oldest = slotId;
+            }
+        }
+
+        return oldest ?? "autosave_1";
     }
 
     public void SetActiveSlot(string slotId)
@@ -180,8 +253,15 @@ public sealed class SaveLoadManager : MonoBehaviour
             if (!Directory.Exists(SaveFolder))
                 Directory.CreateDirectory(SaveFolder);
 
+            // Write to a temp file first so a crash mid-write can't corrupt the slot.
             string path = GetSavePath(slotId);
-            File.WriteAllText(path, json);
+            string tmpPath = path + ".tmp";
+            File.WriteAllText(tmpPath, json);
+
+            if (File.Exists(path))
+                File.Replace(tmpPath, path, null);
+            else
+                File.Move(tmpPath, path);
 
             if (verboseLogs)
                 Debug.Log($"[SaveLoadManager] Saved slot '{slotId}' to: {path}");
@@ -325,6 +405,11 @@ public sealed class SaveLoadManager : MonoBehaviour
     private void RequestAutosave()
     {
         if (_isLoading)
+            return;
+
+        // Never autosave outside gameplay: launching to the main menu raises
+        // LocationEntered, which must not write a fresh default state anywhere.
+        if (!IsGameplayActive())
             return;
 
         _autosavePending = true;

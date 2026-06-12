@@ -44,7 +44,8 @@ public sealed class SaveSlotItemUI : MonoBehaviour
         SaveSlotInfo info,
         Action<string> onSave,
         Action<string> onLoad,
-        Action<string> onDelete)
+        Action<string> onDelete,
+        bool allowSave = true)
     {
         _slotId = info != null ? info.slotId : null;
         _onSave = onSave;
@@ -52,7 +53,12 @@ public sealed class SaveSlotItemUI : MonoBehaviour
         _onDelete = onDelete;
 
         if (slotTitleText != null)
-            slotTitleText.text = string.IsNullOrWhiteSpace(_slotId) ? "Empty Slot" : _slotId;
+            slotTitleText.text = FormatSlotTitle(_slotId);
+
+        // Read-only rows (autosaves) hide Save entirely so the player can't
+        // overwrite them manually.
+        if (saveButton != null)
+            saveButton.gameObject.SetActive(allowSave);
 
         if (metaText != null)
         {
@@ -78,6 +84,22 @@ public sealed class SaveSlotItemUI : MonoBehaviour
 
         if (deleteButton != null)
             deleteButton.interactable = info != null && info.exists;
+    }
+
+    /// <summary>"autosave_1" -> "Autosave 1", "slot_2" -> "Slot 2".</summary>
+    private static string FormatSlotTitle(string slotId)
+    {
+        if (string.IsNullOrWhiteSpace(slotId))
+            return "Empty Slot";
+
+        var parts = slotId.Split('_');
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (parts[i].Length > 0)
+                parts[i] = char.ToUpperInvariant(parts[i][0]) + parts[i].Substring(1);
+        }
+
+        return string.Join(" ", parts);
     }
 
     private void HandleSave()

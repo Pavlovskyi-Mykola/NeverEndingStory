@@ -11,6 +11,9 @@ public sealed class SaveLoadPanelUI : MonoBehaviour
     [Header("Slots")]
     [SerializeField] private List<SaveSlotItemUI> slotItems = new();
 
+    [Tooltip("Read-only rows for the autosave rotation: load/delete only, no Save button. Slot ids come from SaveLoadManager.AutosaveSlotIds.")]
+    [SerializeField] private List<SaveSlotItemUI> autosaveSlotItems = new();
+
     [Header("Config")]
     [SerializeField] private bool hideOnStart = true;
     [SerializeField] private bool refreshOnEnable = true;
@@ -68,13 +71,14 @@ public sealed class SaveLoadPanelUI : MonoBehaviour
 
     public void Refresh()
     {
-        if (SaveLoadManager.Instance == null)
+        var manager = SaveLoadManager.Instance;
+        if (manager == null)
         {
             Debug.LogWarning("[SaveLoadPanelUI] SaveLoadManager not found.");
             return;
         }
 
-        var infos = SaveLoadManager.Instance.GetAllSlotInfos(slotIds);
+        var infos = manager.GetAllSlotInfos(slotIds);
 
         for (int i = 0; i < slotItems.Count; i++)
         {
@@ -88,6 +92,24 @@ public sealed class SaveLoadPanelUI : MonoBehaviour
             };
 
             slotItems[i].Bind(info, HandleSave, HandleLoad, HandleDelete);
+        }
+
+        // Autosave rows: load/delete only, ids owned by the manager.
+        var autosaveIds = manager.AutosaveSlotIds;
+
+        for (int i = 0; i < autosaveSlotItems.Count; i++)
+        {
+            if (autosaveSlotItems[i] == null)
+                continue;
+
+            string slotId = autosaveIds != null && i < autosaveIds.Count ? autosaveIds[i] : $"autosave_{i + 1}";
+
+            autosaveSlotItems[i].Bind(
+                manager.GetSlotInfo(slotId),
+                onSave: null,
+                onLoad: HandleLoad,
+                onDelete: HandleDelete,
+                allowSave: false);
         }
     }
 

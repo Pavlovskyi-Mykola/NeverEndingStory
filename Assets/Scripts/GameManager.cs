@@ -26,6 +26,29 @@ public class GameManager : MonoBehaviour
     // Track loaded scenes by name
     private readonly HashSet<string> _loaded = new HashSet<string>();
 
+    // Scenes with an async load/unload in flight — guards against loading a
+    // duplicate additive instance when the same scene is requested twice.
+    private readonly HashSet<string> _loading = new HashSet<string>();
+    private readonly HashSet<string> _unloading = new HashSet<string>();
+
+    private bool _isSwitchingLocation;
+
+    /// <summary>True once the player is in an actual location (not the main menu). Gates autosaves.</summary>
+    public bool IsInGameplay
+    {
+        get
+        {
+            if (CurrentLocationRef == null || !CurrentLocationRef.IsValid)
+                return false;
+
+            if (sceneDatabase != null && sceneDatabase.MainMenu != null && sceneDatabase.MainMenu.IsValid &&
+                CurrentLocationRef.SceneName == sceneDatabase.MainMenu.SceneName)
+                return false;
+
+            return true;
+        }
+    }
+
     public event Action<string> SceneLoadStarted;
     public event Action<string> SceneLoadCompleted;
     public event Action<string> SceneUnloadStarted;
@@ -118,7 +141,9 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        await SwitchLocation(target);
+        // force: entry gates (time windows, career floors) must not block restoring
+        // a save — the position was valid when the player saved.
+        await SwitchLocation(target, force: true);
     }
 
     private SceneReference FindSceneReferenceByName(string sceneName)
@@ -187,6 +212,11 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // If the same scene is already loading, wait for that load instead of
+        // starting a second one (additive duplicates of the same scene).
+        while (_loading.Contains(sceneName))
+            await Task.Yield();
+
         if (_loaded.Contains(sceneName))
         {
             if (setActive)
@@ -194,26 +224,34 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        SceneLoadStarted?.Invoke(sceneName);
-
-        var op = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
-        if (op == null)
+        _loading.Add(sceneName);
+        try
         {
-            Debug.LogError($"Load failed: LoadSceneAsync returned null for '{sceneName}'. Is it in Build Settings?");
-            return;
+            SceneLoadStarted?.Invoke(sceneName);
+
+            var op = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
+            if (op == null)
+            {
+                Debug.LogError($"Load failed: LoadSceneAsync returned null for '{sceneName}'. Is it in Build Settings?");
+                return;
+            }
+
+            op.allowSceneActivation = true;
+
+            while (!op.isDone)
+                await Task.Yield();
+
+            _loaded.Add(sceneName);
+
+            if (setActive)
+                SetActive(sceneName);
+
+            SceneLoadCompleted?.Invoke(sceneName);
         }
-
-        op.allowSceneActivation = true;
-
-        while (!op.isDone)
-            await Task.Yield();
-
-        _loaded.Add(sceneName);
-
-        if (setActive)
-            SetActive(sceneName);
-
-        SceneLoadCompleted?.Invoke(sceneName);
+        finally
+        {
+            _loading.Remove(sceneName);
+        }
     }
 
     public async Task Unload(string sceneName)
@@ -224,45 +262,58 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // If the same scene is already unloading, wait for that instead of
+        // issuing a second unload.
+        while (_unloading.Contains(sceneName))
+            await Task.Yield();
+
         if (!_loaded.Contains(sceneName))
             return;
 
-        SceneUnloadStarted?.Invoke(sceneName);
-
-        var scene = SceneManager.GetSceneByName(sceneName);
-        if (!scene.IsValid() || !scene.isLoaded)
+        _unloading.Add(sceneName);
+        try
         {
-            _loaded.Remove(sceneName);
-            SceneUnloadCompleted?.Invoke(sceneName);
-            return;
-        }
+            SceneUnloadStarted?.Invoke(sceneName);
 
-        // Don't unload the active scene without switching away first
-        if (SceneManager.GetActiveScene().name == sceneName)
-        {
-            foreach (var s in _loaded)
+            var scene = SceneManager.GetSceneByName(sceneName);
+            if (!scene.IsValid() || !scene.isLoaded)
             {
-                if (s != sceneName)
+                _loaded.Remove(sceneName);
+                SceneUnloadCompleted?.Invoke(sceneName);
+                return;
+            }
+
+            // Don't unload the active scene without switching away first
+            if (SceneManager.GetActiveScene().name == sceneName)
+            {
+                foreach (var s in _loaded)
                 {
-                    SetActive(s);
-                    break;
+                    if (s != sceneName)
+                    {
+                        SetActive(s);
+                        break;
+                    }
                 }
             }
-        }
 
-        var op = SceneManager.UnloadSceneAsync(scene);
-        if (op == null)
+            var op = SceneManager.UnloadSceneAsync(scene);
+            if (op == null)
+            {
+                Debug.LogError($"Unload failed: UnloadSceneAsync returned null for '{sceneName}'.");
+                return;
+            }
+
+            while (!op.isDone)
+                await Task.Yield();
+
+            _loaded.Remove(sceneName);
+
+            SceneUnloadCompleted?.Invoke(sceneName);
+        }
+        finally
         {
-            Debug.LogError($"Unload failed: UnloadSceneAsync returned null for '{sceneName}'.");
-            return;
+            _unloading.Remove(sceneName);
         }
-
-        while (!op.isDone)
-            await Task.Yield();
-
-        _loaded.Remove(sceneName);
-
-        SceneUnloadCompleted?.Invoke(sceneName);
     }
 
     public bool SetActive(string sceneName)
@@ -296,44 +347,71 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public async Task SwitchLocation(SceneReference targetLocation)
+    public async Task SwitchLocation(SceneReference targetLocation, bool force = false)
     {
         if (targetLocation == null || !targetLocation.IsValid)
             return;
 
-        if (IsBlockedByCareer(targetLocation))
-        {
-            Debug.Log($"Blocked travel to '{targetLocation.SceneName}' because floor is not unlocked yet.");
+        // Ignore travel spam while a switch is in progress (double-clicked buttons).
+        if (_isSwitchingLocation)
             return;
-        }
 
-        LocationLoadStarted?.Invoke(targetLocation);
-
-        if (sceneDatabase != null && TimeManager.Instance != null)
+        // All validation happens before LocationLoadStarted, so listeners
+        // (loading screens, faders) never see a start without a matching ready.
+        if (!force)
         {
-            var day = TimeManager.Instance.DayOfWeek;
-            var phase = TimeManager.Instance.TimeOfDay;
-            var inventory = InventoryManager.Instance;
-
-            if (!sceneDatabase.CanEnterNow(targetLocation, day, phase, inventory))
+            if (IsBlockedByCareer(targetLocation))
             {
-                Debug.Log($"Blocked travel to '{targetLocation.SceneName}' due to requirements.");
+                Debug.Log($"Blocked travel to '{targetLocation.SceneName}' because floor is not unlocked yet.");
                 return;
+            }
+
+            if (sceneDatabase != null && TimeManager.Instance != null)
+            {
+                var day = TimeManager.Instance.DayOfWeek;
+                var phase = TimeManager.Instance.TimeOfDay;
+                var inventory = InventoryManager.Instance;
+
+                if (!sceneDatabase.CanEnterNow(targetLocation, day, phase, inventory))
+                {
+                    Debug.Log($"Blocked travel to '{targetLocation.SceneName}' due to requirements.");
+                    return;
+                }
             }
         }
 
-        if (CurrentLocationRef != null && CurrentLocationRef.IsValid)
-            await Unload(CurrentLocationRef);
+        _isSwitchingLocation = true;
+        try
+        {
+            LocationLoadStarted?.Invoke(targetLocation);
 
-        await Load(targetLocation, setActive: true);
+            var previous = CurrentLocationRef;
 
-        CurrentLocationRef = targetLocation;
+            // Load the target first: if it fails, the player still stands in the
+            // old location instead of nowhere.
+            await Load(targetLocation, setActive: true);
 
-        if (CareerManager.Instance != null)
-            CareerManager.Instance.SetCurrentFloor(targetLocation.SceneName);
+            if (!_loaded.Contains(targetLocation.SceneName))
+            {
+                Debug.LogError($"SwitchLocation: failed to load '{targetLocation.SceneName}', staying in '{previous?.SceneName ?? "<none>"}'.");
+                return;
+            }
 
-        LocationReady?.Invoke(CurrentLocationRef);
-        GameEvents.RaiseLocationEntered(CurrentLocationRef.SceneName);
+            CurrentLocationRef = targetLocation;
+
+            if (previous != null && previous.IsValid && previous.SceneName != targetLocation.SceneName)
+                await Unload(previous);
+
+            if (CareerManager.Instance != null)
+                CareerManager.Instance.SetCurrentFloor(targetLocation.SceneName);
+
+            LocationReady?.Invoke(CurrentLocationRef);
+            GameEvents.RaiseLocationEntered(CurrentLocationRef.SceneName);
+        }
+        finally
+        {
+            _isSwitchingLocation = false;
+        }
     }
 
     // ✅ Failsafe: if current location becomes invalid after time skip -> force Home
@@ -359,7 +437,7 @@ public class GameManager : MonoBehaviour
             try
             {
                 Debug.Log($"Location '{CurrentLocationRef.SceneName}' became restricted at {day}/{phase}. Forcing Home.");
-                await SwitchLocation(sceneDatabase.Home);
+                await SwitchLocation(sceneDatabase.Home, force: true);
             }
             finally
             {

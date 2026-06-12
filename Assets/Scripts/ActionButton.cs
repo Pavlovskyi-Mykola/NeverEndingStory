@@ -13,42 +13,31 @@ public class ActionButton : MonoBehaviour
 
     private void OnEnable()
     {
-        Subscribe();
+        // ActionService funnels every relevant change (stats, time, inventory,
+        // UI blocking) into OnActionStateChanged — one subscription covers all.
+        ActionService.InstanceReady += HandleServiceReady;
+        if (ActionService.Instance != null)
+            HandleServiceReady(ActionService.Instance);
+
         Refresh();
         if (button != null) button.onClick.AddListener(OnClick);
     }
 
     private void OnDisable()
     {
-        Unsubscribe();
+        ActionService.InstanceReady -= HandleServiceReady;
+        if (ActionService.Instance != null)
+            ActionService.Instance.OnActionStateChanged -= Refresh;
+
         if (button != null) button.onClick.RemoveListener(OnClick);
     }
 
-    private void Subscribe()
+    private void HandleServiceReady(ActionService service)
     {
-        if (PlayerStatsManager.Instance != null)
-            PlayerStatsManager.Instance.OnStatsChanged += Refresh;
-
-        if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
-
-        if (ActionService.Instance != null)
-            ActionService.Instance.OnActionStateChanged += Refresh;
+        service.OnActionStateChanged -= Refresh;
+        service.OnActionStateChanged += Refresh;
+        Refresh();
     }
-
-    private void Unsubscribe()
-    {
-        if (PlayerStatsManager.Instance != null)
-            PlayerStatsManager.Instance.OnStatsChanged -= Refresh;
-
-        if (TimeManager.Instance != null)
-            TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
-
-        if (ActionService.Instance != null)
-            ActionService.Instance.OnActionStateChanged -= Refresh;
-    }
-
-    private void HandleTimeChanged(System.DayOfWeek d, TimeOfDay p) => Refresh();
 
     private void Refresh()
     {

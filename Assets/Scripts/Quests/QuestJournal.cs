@@ -9,6 +9,7 @@ using UnityEngine;
 public sealed class QuestJournal : MonoBehaviour
 {
     public static QuestJournal Instance { get; private set; }
+    public static event Action<QuestJournal> InstanceReady;
 
     private readonly HashSet<string> _active = new();
     private readonly HashSet<string> _completed = new();
@@ -28,6 +29,7 @@ public sealed class QuestJournal : MonoBehaviour
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        InstanceReady?.Invoke(this);
     }
 
     public bool IsActive(string questId) => !string.IsNullOrEmpty(questId) && _active.Contains(questId);

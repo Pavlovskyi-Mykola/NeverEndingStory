@@ -4,8 +4,13 @@ using UnityEngine;
 public class ActionService : MonoBehaviour
 {
     public static ActionService Instance { get; private set; }
+    public static event Action<ActionService> InstanceReady;
 
     public event Action OnActionStateChanged;
+
+    // Enum.GetValues allocates a boxed array on every call; CanExecute runs per
+    // button per state change, so cache it once.
+    private static readonly StatType[] StatTypes = (StatType[])Enum.GetValues(typeof(StatType));
 
     private void Awake()
     {
@@ -17,17 +22,25 @@ public class ActionService : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        InstanceReady?.Invoke(this);
     }
 
     private void OnEnable()
     {
+        // Single notification surface: everything that can change action
+        // availability funnels into OnActionStateChanged, so buttons only need
+        // to listen here.
         GameEvents.InventoryChanged += HandleInventoryChanged;
+        GameEvents.StatsChanged += HandleStatsChanged;
+        GameEvents.TimeChanged += HandleTimeChanged;
         UIPanelManager.GameplayBlockedChanged += HandleGameplayBlockedChanged;
     }
 
     private void OnDisable()
     {
         GameEvents.InventoryChanged -= HandleInventoryChanged;
+        GameEvents.StatsChanged -= HandleStatsChanged;
+        GameEvents.TimeChanged -= HandleTimeChanged;
         UIPanelManager.GameplayBlockedChanged -= HandleGameplayBlockedChanged;
     }
 
@@ -37,6 +50,16 @@ public class ActionService : MonoBehaviour
     }
 
     private void HandleInventoryChanged(GameEvents.InventoryChange _)
+    {
+        NotifyStateChanged();
+    }
+
+    private void HandleStatsChanged(GameEvents.StatsSnapshot _)
+    {
+        NotifyStateChanged();
+    }
+
+    private void HandleTimeChanged(DayOfWeek day, TimeOfDay phase, TimeChangeSource source)
     {
         NotifyStateChanged();
     }
@@ -96,8 +119,9 @@ public class ActionService : MonoBehaviour
             }
         }
 
-        foreach (StatType stat in System.Enum.GetValues(typeof(StatType)))
+        for (int i = 0; i < StatTypes.Length; i++)
         {
+            var stat = StatTypes[i];
             if (stats.Get(stat) < action.GetRequirement(stat))
             {
                 reason = StatToFailReason(stat);
@@ -158,8 +182,10 @@ public class ActionService : MonoBehaviour
         var stats = PlayerStatsManager.Instance;
         var inventory = InventoryManager.Instance;
 
-        if (action.MoneyCost > 0)
-            stats.TrySpendMoney(action.MoneyCost);
+        // CanExecute just verified affordability in this same frame, so these
+        // should never fail — if one does, something changed state in between.
+        if (action.MoneyCost > 0 && !stats.TrySpendMoney(action.MoneyCost))
+            Debug.LogWarning($"[ActionService] '{action.name}': money spend failed after CanExecute passed.");
 
         if (action.ItemCosts != null && inventory != null)
         {
@@ -169,12 +195,14 @@ public class ActionService : MonoBehaviour
                 if (cost == null || string.IsNullOrWhiteSpace(cost.ItemId))
                     continue;
 
-                inventory.TryConsume(cost.ItemId, Mathf.Max(1, cost.Count));
+                if (!inventory.TryConsume(cost.ItemId, Mathf.Max(1, cost.Count)))
+                    Debug.LogWarning($"[ActionService] '{action.name}': consuming '{cost.ItemId}' failed after CanExecute passed.");
             }
         }
 
-        foreach (StatType stat in System.Enum.GetValues(typeof(StatType)))
+        for (int i = 0; i < StatTypes.Length; i++)
         {
+            var stat = StatTypes[i];
             int reward = action.GetReward(stat);
             if (reward > 0) stats.Add(stat, reward);
         }
