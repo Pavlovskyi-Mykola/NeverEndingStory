@@ -403,6 +403,13 @@ public class QuestEditorWindow : EditorWindow
                 EditorGUILayout.PropertyField(stepProp.FindPropertyRelative("RequiredReputation"));
                 break;
 
+            case QuestStepType.FlagTrue:
+            {
+                var rect = EditorGUILayout.GetControlRect();
+                WorldFlagEditorUtility.DrawFlagField(rect, stepProp.FindPropertyRelative("RequiredFlagId"), new GUIContent("Required Flag"));
+                break;
+            }
+
             case QuestStepType.TimeWindow:
             case QuestStepType.Manual:
             case QuestStepType.AutoComplete:
@@ -687,6 +694,15 @@ public class QuestEditorWindow : EditorWindow
                 return "Item count should be > 0.";
         }
 
+        if (type == QuestStepType.FlagTrue)
+        {
+            string flagId = s.FindPropertyRelative("RequiredFlagId")?.stringValue;
+            if (string.IsNullOrWhiteSpace(flagId))
+                return "Required flag is not set.";
+            if (!WorldFlagEditorUtility.IsKnownFlag(flagId))
+                return $"Flag '{flagId}' is not declared in WorldFlags.cs. Typo?";
+        }
+
         return null;
     }
 
@@ -774,6 +790,11 @@ public class QuestEditorWindow : EditorWindow
             }
             case QuestStepType.Manual:       return "Complete the objective";
             case QuestStepType.AutoComplete: return "Progress";
+            case QuestStepType.FlagTrue:
+            {
+                string fid = s.FindPropertyRelative("RequiredFlagId")?.stringValue ?? "";
+                return string.IsNullOrEmpty(fid) ? "Progress (choose flag below)" : $"Waiting for: {fid}";
+            }
             case QuestStepType.TimeWindow:
             {
                 bool rd = s.FindPropertyRelative("RestrictByDay")?.boolValue   ?? false;

@@ -10,4 +10,5 @@ public enum QuestStepType
     HaveMoney = 14,
     PayMoney = 15,
     TimeWindow = 16,
+    FlagTrue = 17,
 }

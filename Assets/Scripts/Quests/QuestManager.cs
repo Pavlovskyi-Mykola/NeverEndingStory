@@ -15,6 +15,12 @@ public sealed class QuestManager : MonoBehaviour
     private string _lastTalkNpcId = null;
     private string _lastTalkDialogueId = null;
 
+    // Game events mark quests dirty; advancement runs once per frame in LateUpdate.
+    // This collapses event bursts (e.g. a reward setting several flags) into a single
+    // pass and keeps TryAdvanceAllActive from re-entering itself when completing a
+    // quest raises events (rewards -> FlagChanged/StatsChanged -> dirty again).
+    private bool _advancePending;
+
     private QuestJournal Journal => QuestJournal.Instance;
 
     private void Awake()
@@ -49,7 +55,7 @@ public sealed class QuestManager : MonoBehaviour
     //flags become a first-class quest trigger
     private void HandleFlagChanged(string key, bool value)
     {
-        TryAdvanceAllActive();
+        MarkQuestsDirty();
     }
 
     private void HandleNpcTalked(string npcId, string dialogueId)
@@ -61,22 +67,45 @@ public sealed class QuestManager : MonoBehaviour
         _lastTalkNpcId = npcId;
         _lastTalkDialogueId = dialogueId;
 
-        TryAdvanceAllActive();
+        MarkQuestsDirty();
     }
 
     private void HandleTimeChanged(DayOfWeek day, TimeOfDay phase, TimeChangeSource source)
     {
-        TryAdvanceAllActive();
+        MarkQuestsDirty();
     }
 
     private void HandleLocationEntered(string locationSceneName)
     {
-        TryAdvanceAllActive();
+        MarkQuestsDirty();
     }
 
     private void HandleStatsChanged(GameEvents.StatsSnapshot snapshot)
     {
-        TryAdvanceAllActive();
+        MarkQuestsDirty();
+    }
+
+    private void MarkQuestsDirty()
+    {
+        _advancePending = true;
+    }
+
+    private void LateUpdate()
+    {
+        if (!_advancePending)
+            return;
+
+        // Advancing can raise events that mark quests dirty again (completion rewards
+        // setting flags); keep going so chains resolve within the same frame, with a
+        // cap in case two quests ever ping-pong a flag.
+        for (int i = 0; i < 8 && _advancePending; i++)
+        {
+            _advancePending = false;
+            TryAdvanceAllActive();
+        }
+
+        if (_advancePending)
+            Debug.LogWarning("[QuestManager] Quest advancement did not settle after 8 passes — check for quests that repeatedly toggle the same flag.");
     }
 
     private void TryAdvanceAllActive()
@@ -333,6 +362,9 @@ public sealed class QuestManager : MonoBehaviour
                 // MeetsTimeConstraints already gates on the window; if we reach here it's open
                 return true;
 
+            case QuestStepType.FlagTrue:
+                return !string.IsNullOrWhiteSpace(step.RequiredFlagId) && WorldFlags.Get(step.RequiredFlagId);
+
             case QuestStepType.TalkToDialogue:
                 {
                     if (prog.LastConsumedTalkToken == _talkToken)
@@ -396,7 +428,7 @@ public sealed class QuestManager : MonoBehaviour
     // --- QUESTS ---
     private void HandleInventoryChanged(GameEvents.InventoryChange change)
     {
-        TryAdvanceAllActive();
+        MarkQuestsDirty();
     }
     private bool HasRequiredItem(QuestStepDefinition step)
     {

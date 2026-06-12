@@ -55,7 +55,7 @@ public class DialogueSelectorRule
     public int requiredQuestStepIndex = -1;
 
     [Header("Flags (optional)")]
-    public string requiredFlagId;
+    [FlagId] public string requiredFlagId;
     public bool requiredFlagValue = true;
 
     [Header("Stats (optional)")]

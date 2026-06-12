@@ -83,6 +83,11 @@ public class WorldState : MonoBehaviour
         bool had = _flags.TryGetValue(key, out var oldValue);
         if (had && oldValue == value) return;
 
+#if UNITY_EDITOR
+        if (!WorldFlags.IsKnown(key))
+            Debug.LogWarning($"[WorldState] Setting flag '{key}' which is not declared in WorldFlags.cs — possible typo in dialogue/quest data.");
+#endif
+
         _flags[key] = value;
 
         if (logFlagChanges)

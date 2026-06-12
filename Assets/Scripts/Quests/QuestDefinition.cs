@@ -59,4 +59,7 @@ public class QuestStepDefinition
 
     [Header("Inventory (HaveItem)")]
     public ItemAmount RequiredItem;
+
+    [Header("World Flag (FlagTrue)")]
+    [FlagId] public string RequiredFlagId;
 }

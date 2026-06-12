@@ -42,6 +42,43 @@ public static class WorldFlags
     // Runtime helper API
     // -------------------------
 
+    private static HashSet<string> _knownIds;
+
+    /// <summary>True when the id is declared as a const in this catalog. Used to catch typos in data-driven flag ids.</summary>
+    public static bool IsKnown(string flagId)
+    {
+        if (string.IsNullOrWhiteSpace(flagId)) return false;
+
+        if (_knownIds == null)
+        {
+            _knownIds = new HashSet<string>(StringComparer.Ordinal);
+            CollectConstStrings(typeof(WorldFlags), _knownIds);
+        }
+
+        return _knownIds.Contains(flagId);
+    }
+
+    private static void CollectConstStrings(Type type, HashSet<string> results)
+    {
+        const System.Reflection.BindingFlags bindingFlags =
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Static |
+            System.Reflection.BindingFlags.FlattenHierarchy;
+
+        foreach (var field in type.GetFields(bindingFlags))
+        {
+            if (field.FieldType != typeof(string)) continue;
+            if (!field.IsLiteral || field.IsInitOnly) continue;
+
+            if (field.GetRawConstantValue() is string s && !string.IsNullOrWhiteSpace(s))
+                results.Add(s);
+        }
+
+        foreach (var nested in type.GetNestedTypes(bindingFlags))
+            CollectConstStrings(nested, results);
+    }
+
     public static bool Has(string flagId)
     {
         return WorldState.Instance != null && WorldState.Instance.HasFlag(flagId);

@@ -20,6 +20,7 @@ public class DialogueCondition
 
     public int intValue;
     public TimeOfDay timeOfDayValue;
+    [FlagId] public string flagId;
 }
 
 [Serializable]
@@ -61,6 +62,10 @@ public class DialogueConditionGroup
 
             case DialogueConditionType.TimeOfDayIs:
                 return TimeManager.Instance != null && TimeManager.Instance.TimeOfDay == c.timeOfDayValue;
+
+            case DialogueConditionType.FlagIsTrue:
+                // An unset flag id fails the condition rather than silently passing.
+                return !string.IsNullOrWhiteSpace(c.flagId) && WorldFlags.Get(c.flagId);
 
             default:
                 return true;
