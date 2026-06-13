@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class QuestManager : MonoBehaviour
@@ -9,7 +10,14 @@ public sealed class QuestManager : MonoBehaviour
     [Header("Data")]
     [SerializeField] private QuestDatabase database;
 
+    /// <summary>Coarse signal: something about quest state changed. UI rebuilds on it.</summary>
     public event Action OnQuestStateChanged;
+
+    // Granular signals for notifications/analytics. Fired after the batch settles,
+    // so listeners always see consistent state and can't re-enter the advance loop.
+    public event Action<string> OnQuestStarted;            // questId
+    public event Action<string, int> OnQuestStepAdvanced;  // questId, new step index
+    public event Action<string> OnQuestCompleted;          // questId
 
     private int _talkToken = 0;
     private string _lastTalkNpcId = null;
@@ -17,9 +25,18 @@ public sealed class QuestManager : MonoBehaviour
 
     // Game events mark quests dirty; advancement runs once per frame in LateUpdate.
     // This collapses event bursts (e.g. a reward setting several flags) into a single
-    // pass and keeps TryAdvanceAllActive from re-entering itself when completing a
+    // pass and keeps the advance loop from re-entering itself when completing a
     // quest raises events (rewards -> FlagChanged/StatsChanged -> dirty again).
     private bool _advancePending;
+    private bool _processingBatch;
+
+    // Quests completed during the current batch — prevents a repeatable quest with
+    // a 0-phase cooldown from instantly restarting and looping within one frame.
+    private readonly HashSet<string> _completedThisBatch = new();
+
+    private enum QuestEventKind { Started, StepAdvanced, Completed }
+    private struct QuestEvent { public QuestEventKind Kind; public string QuestId; public int StepIndex; }
+    private readonly List<QuestEvent> _pendingEvents = new();
 
     private QuestJournal Journal => QuestJournal.Instance;
 
@@ -92,29 +109,42 @@ public sealed class QuestManager : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (!_advancePending)
+        if (!_advancePending || _processingBatch)
             return;
 
-        // Advancing can raise events that mark quests dirty again (completion rewards
-        // setting flags); keep going so chains resolve within the same frame, with a
-        // cap in case two quests ever ping-pong a flag.
-        for (int i = 0; i < 8 && _advancePending; i++)
+        _processingBatch = true;
+        _completedThisBatch.Clear();
+        bool changed = false;
+
+        // Advancing can raise events that mark quests dirty again (rewards setting
+        // flags) and auto-start can spawn quests that then need advancing; keep
+        // going so chains resolve within the same frame, capped against runaways.
+        int pass = 0;
+        while (_advancePending && pass++ < 8)
         {
             _advancePending = false;
-            TryAdvanceAllActive();
+            changed |= AdvanceActiveQuests();
+            changed |= EvaluateAutoStarts();
         }
 
         if (_advancePending)
-            Debug.LogWarning("[QuestManager] Quest advancement did not settle after 8 passes — check for quests that repeatedly toggle the same flag.");
+            Debug.LogWarning("[QuestManager] Quest advancement did not settle after 8 passes — check for quests that repeatedly toggle the same flag, or a 0-cooldown repeatable auto-start.");
+
+        _processingBatch = false;
+
+        // One coarse event per batch; granular events flushed after state is settled.
+        if (changed)
+            OnQuestStateChanged?.Invoke();
+
+        FlushQuestEvents();
     }
 
-    private void TryAdvanceAllActive()
+    private bool AdvanceActiveQuests()
     {
-        if (Journal == null) return;
+        if (Journal == null) return false;
 
         bool changed = false;
-
-        var snapshot = new System.Collections.Generic.List<string>(Journal.Active);
+        var snapshot = new List<string>(Journal.Active);
 
         for (int i = 0; i < snapshot.Count; i++)
         {
@@ -124,11 +154,40 @@ public sealed class QuestManager : MonoBehaviour
             changed |= AdvanceQuestNoNotify(questId);
         }
 
-        // One event per batch — subscribers like QuestUI fully rebuild on it.
-        if (changed)
-            OnQuestStateChanged?.Invoke();
+        return changed;
     }
 
+    private bool EvaluateAutoStarts()
+    {
+        if (Journal == null || database == null || database.Quests == null)
+            return false;
+
+        bool startedAny = false;
+        var quests = database.Quests;
+
+        for (int i = 0; i < quests.Count; i++)
+        {
+            var def = quests[i];
+            if (def == null || !def.AutoStart || !def.IsValid())
+                continue;
+
+            if (!CanStart(def))
+                continue;
+
+            if (def.StartCondition != null && !def.StartCondition.IsMet(Journal))
+                continue;
+
+            if (StartQuestInternal(def.QuestId))
+            {
+                startedAny = true;
+                _advancePending = true; // re-run so the new quest advances this batch
+            }
+        }
+
+        return startedAny;
+    }
+
+    /// <summary>Public entry (dialogue commands, debug). Starts immediately and flushes its own events.</summary>
     public bool StartQuest(string questId)
     {
         if (string.IsNullOrEmpty(questId)) return false;
@@ -141,13 +200,29 @@ public sealed class QuestManager : MonoBehaviour
             return false;
         }
 
-        if (Journal.IsCompleted(questId))
+        bool started = StartQuestInternal(questId);
+
+        // When called from inside the batch, let it own notify/flush. Otherwise
+        // mark dirty so the next batch can run auto-starts/chains off this quest.
+        if (!_processingBatch)
+        {
+            if (started)
+            {
+                OnQuestStateChanged?.Invoke();
+                MarkQuestsDirty();
+            }
+            FlushQuestEvents();
+        }
+
+        return started;
+    }
+
+    private bool StartQuestInternal(string questId)
+    {
+        if (!CanStart(questId, out _))
             return false;
 
-        if (Journal.IsActive(questId))
-            return false;
-
-        Journal.MarkStarted(questId);
+        Journal.MarkStarted(questId); // removes from completed, adds active, TimesStarted++
 
         var prog = Journal.GetOrCreateProgress(questId);
         prog.CurrentStepIndex = 0;
@@ -158,18 +233,69 @@ public sealed class QuestManager : MonoBehaviour
         // TalkToDialogue steps — consume the current token up front.
         prog.LastConsumedTalkToken = _talkToken;
 
-        AdvanceQuestNoNotify(questId);
+        QueueEvent(QuestEventKind.Started, questId, 0);
 
-        OnQuestStateChanged?.Invoke();
+        AdvanceQuestNoNotify(questId);
         return true;
+    }
+
+    private bool CanStart(QuestDefinition def) =>
+        def != null && CanStart(def.QuestId, out _);
+
+    private bool CanStart(string questId, out QuestDefinition def)
+    {
+        def = null;
+        if (string.IsNullOrEmpty(questId) || Journal == null || database == null)
+            return false;
+
+        if (!database.TryGet(questId, out def) || def == null || !def.IsValid())
+            return false;
+
+        if (Journal.IsActive(questId))
+            return false;
+
+        // Don't restart something that just completed this batch (0-cooldown loop guard).
+        if (_completedThisBatch.Contains(questId))
+            return false;
+
+        if (Journal.IsCompleted(questId))
+        {
+            if (!def.Repeatable)
+                return false;
+
+            if (!IsRepeatCooldownElapsed(questId, def))
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool IsRepeatCooldownElapsed(string questId, QuestDefinition def)
+    {
+        if (def.RepeatCooldownPhases <= 0)
+            return true;
+
+        var prog = Journal.GetOrCreateProgress(questId);
+        if (prog == null || prog.LastCompletedPhase < 0)
+            return true;
+
+        long now = TimeManager.Instance != null ? TimeManager.Instance.TotalPhasesElapsed : 0;
+        return now - prog.LastCompletedPhase >= def.RepeatCooldownPhases;
     }
 
     public bool TryAdvanceQuest(string questId)
     {
         bool changed = AdvanceQuestNoNotify(questId);
 
-        if (changed)
-            OnQuestStateChanged?.Invoke();
+        if (!_processingBatch)
+        {
+            if (changed)
+            {
+                OnQuestStateChanged?.Invoke();
+                MarkQuestsDirty();
+            }
+            FlushQuestEvents();
+        }
 
         return changed;
     }
@@ -185,8 +311,7 @@ public sealed class QuestManager : MonoBehaviour
         {
             if (prog.CurrentStepIndex >= def.Steps.Count)
             {
-                GrantCompletionRewards(def, prog);
-                Journal.MarkCompleted(questId);
+                CompleteQuest(questId, def, prog);
                 changed = true;
                 break;
             }
@@ -194,8 +319,7 @@ public sealed class QuestManager : MonoBehaviour
             var step = GetCurrentStep(def, prog);
             if (step == null)
             {
-                GrantCompletionRewards(def, prog);
-                Journal.MarkCompleted(questId);
+                CompleteQuest(questId, def, prog);
                 changed = true;
                 break;
             }
@@ -219,14 +343,50 @@ public sealed class QuestManager : MonoBehaviour
 
             if (prog.CurrentStepIndex >= def.Steps.Count)
             {
-                GrantCompletionRewards(def, prog);
-                Journal.MarkCompleted(questId);
-                changed = true;
+                CompleteQuest(questId, def, prog);
                 break;
             }
+
+            QueueEvent(QuestEventKind.StepAdvanced, questId, prog.CurrentStepIndex);
         }
 
         return changed;
+    }
+
+    private void CompleteQuest(string questId, QuestDefinition def, QuestProgress prog)
+    {
+        GrantCompletionRewards(def, prog);
+        Journal.MarkCompleted(questId);
+
+        prog.LastCompletedPhase = TimeManager.Instance != null ? TimeManager.Instance.TotalPhasesElapsed : 0;
+        _completedThisBatch.Add(questId);
+
+        QueueEvent(QuestEventKind.Completed, questId, -1);
+    }
+
+    private void QueueEvent(QuestEventKind kind, string questId, int stepIndex)
+    {
+        _pendingEvents.Add(new QuestEvent { Kind = kind, QuestId = questId, StepIndex = stepIndex });
+    }
+
+    private void FlushQuestEvents()
+    {
+        if (_pendingEvents.Count == 0) return;
+
+        // Snapshot first: a listener could trigger more quest changes mid-dispatch.
+        var events = _pendingEvents.ToArray();
+        _pendingEvents.Clear();
+
+        for (int i = 0; i < events.Length; i++)
+        {
+            var e = events[i];
+            switch (e.Kind)
+            {
+                case QuestEventKind.Started:     OnQuestStarted?.Invoke(e.QuestId); break;
+                case QuestEventKind.StepAdvanced: OnQuestStepAdvanced?.Invoke(e.QuestId, e.StepIndex); break;
+                case QuestEventKind.Completed:   OnQuestCompleted?.Invoke(e.QuestId); break;
+            }
+        }
     }
 
     private bool TryGetDefAndProg(string questId, out QuestDefinition def, out QuestProgress prog)

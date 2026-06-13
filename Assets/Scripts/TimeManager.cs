@@ -15,8 +15,14 @@ public class TimeManager : MonoBehaviour
     [SerializeField] private DayOfWeek dayOfWeek = DayOfWeek.Monday;
     [SerializeField] private TimeOfDay timeOfDay = TimeOfDay.Morning;
 
+    // Monotonic count of phases since the game began. DayOfWeek wraps at 7, so it
+    // can't measure elapsed game time on its own — this gives quests an absolute
+    // clock for cooldowns/deadlines. Persisted in saves.
+    [SerializeField] private long totalPhasesElapsed = 0;
+
     public DayOfWeek DayOfWeek => dayOfWeek;
     public TimeOfDay TimeOfDay => timeOfDay;
+    public long TotalPhasesElapsed => totalPhasesElapsed;
 
     public event Action<DayOfWeek, TimeOfDay> OnTimeChanged;
 
@@ -44,7 +50,8 @@ public class TimeManager : MonoBehaviour
         return new TimeSave
         {
             dayOfWeek = (int)dayOfWeek,
-            timeOfDay = (int)timeOfDay
+            timeOfDay = (int)timeOfDay,
+            totalPhasesElapsed = totalPhasesElapsed
         };
     }
 
@@ -54,6 +61,7 @@ public class TimeManager : MonoBehaviour
 
         dayOfWeek = (DayOfWeek)Mathf.Clamp(data.dayOfWeek, 0, 6);
         timeOfDay = (TimeOfDay)Mathf.Clamp(data.timeOfDay, 0, 3);
+        totalPhasesElapsed = data.totalPhasesElapsed >= 0 ? data.totalPhasesElapsed : 0;
 
         RaiseTimeChanged(TimeChangeSource.System);
     }
@@ -76,6 +84,7 @@ public class TimeManager : MonoBehaviour
                 break;
         }
 
+        totalPhasesElapsed++;
         RaiseTimeChanged(source);
     }
 
@@ -106,7 +115,10 @@ public class TimeManager : MonoBehaviour
             source == TimeChangeSource.PlayerUI)
             return;
 
-        // Sleep ends the day -> next day morning
+        // Sleep ends the day -> next day morning. Phases skipped depend on the
+        // current phase (Morning = a full 4-phase day, Night = 1).
+        totalPhasesElapsed += 4 - (int)timeOfDay;
+
         timeOfDay = TimeOfDay.Morning;
         dayOfWeek = NextDay(dayOfWeek);
 

@@ -14,6 +14,7 @@ public class QuestEditorWindow : EditorWindow
     private QuestDefinition _quest;
     private SerializedObject     _so;
     private SerializedProperty   _questIdProp, _titleProp, _descProp, _stepsProp, _rewardsProp;
+    private SerializedProperty   _autoStartProp, _startConditionProp, _repeatableProp, _repeatCooldownProp;
 
     private Vector2 _leftScroll, _rightScroll;
     private string  _searchFilter = "";
@@ -205,6 +206,8 @@ public class QuestEditorWindow : EditorWindow
 
             DrawIdentitySection();
             SectionGap();
+            DrawAvailabilitySection();
+            SectionGap();
             DrawStepsSection();
             SectionGap();
             DrawRewardsSection();
@@ -242,6 +245,79 @@ public class QuestEditorWindow : EditorWindow
             EditorGUILayout.HelpBox("QuestId is empty. Set a unique id or press Generate.", MessageType.Error);
         else if (CheckDuplicate(id))
             EditorGUILayout.HelpBox($"QuestId '{id}' is used by another quest asset.", MessageType.Error);
+    }
+
+    // ── Availability section (auto-start + repeatable) ────────────────────
+    private void DrawAvailabilitySection()
+    {
+        SectionHeader("Availability");
+
+        EditorGUILayout.PropertyField(_autoStartProp,
+            new GUIContent("Auto Start", "Start automatically when the condition below is met — no dialogue command needed."));
+
+        if (_autoStartProp.boolValue && _startConditionProp != null)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.PropertyField(_startConditionProp,
+                new GUIContent("Start Condition"), true);
+            EditorGUI.indentLevel--;
+
+            string conditionWarning = ValidateStartCondition();
+            if (!string.IsNullOrEmpty(conditionWarning))
+                EditorGUILayout.HelpBox(conditionWarning, MessageType.Warning);
+        }
+
+        EditorGUILayout.Space(4);
+
+        EditorGUILayout.PropertyField(_repeatableProp,
+            new GUIContent("Repeatable", "Can start again after completion (e.g. weekly rent)."));
+
+        if (_repeatableProp.boolValue)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.PropertyField(_repeatCooldownProp,
+                new GUIContent("Repeat Cooldown (phases)", "Phases to wait after completion before restarting. 4 phases = 1 day. 0 = as soon as the start condition holds again."));
+
+            if (_repeatableProp.boolValue && !_autoStartProp.boolValue && _repeatCooldownProp.intValue <= 0)
+                EditorGUILayout.HelpBox("A repeatable quest that isn't auto-started must be re-triggered manually (e.g. dialogue StartQuest).", MessageType.Info);
+
+            EditorGUI.indentLevel--;
+        }
+    }
+
+    // Returns a warning about the start condition's quest references, or null.
+    private string ValidateStartCondition()
+    {
+        if (_startConditionProp == null)
+            return null;
+
+        string selfId = _questIdProp.stringValue;
+
+        string completedMsg = CheckQuestIdList(_startConditionProp.FindPropertyRelative("RequireCompletedQuests"), selfId, "completed");
+        if (completedMsg != null) return completedMsg;
+
+        return CheckQuestIdList(_startConditionProp.FindPropertyRelative("RequireActiveQuests"), selfId, "active");
+    }
+
+    private static string CheckQuestIdList(SerializedProperty listProp, string selfId, string label)
+    {
+        if (listProp == null || !listProp.isArray)
+            return null;
+
+        for (int i = 0; i < listProp.arraySize; i++)
+        {
+            string id = listProp.GetArrayElementAtIndex(i).stringValue;
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            if (!string.IsNullOrEmpty(selfId) && string.Equals(id, selfId, System.StringComparison.Ordinal))
+                return $"Start condition requires this quest itself to be {label} — it would never auto-start.";
+
+            if (!QuestIdEditorUtility.IsKnownQuest(id))
+                return $"Start condition references unknown quest '{id}' (no QuestDefinition with that id).";
+        }
+
+        return null;
     }
 
     // ── Steps section ─────────────────────────────────────────────────────
@@ -884,6 +960,10 @@ public class QuestEditorWindow : EditorWindow
             _descProp    = _so.FindProperty("Description");
             _stepsProp   = _so.FindProperty("Steps");
             _rewardsProp = _so.FindProperty("CompletionRewards");
+            _autoStartProp      = _so.FindProperty("AutoStart");
+            _startConditionProp = _so.FindProperty("StartCondition");
+            _repeatableProp     = _so.FindProperty("Repeatable");
+            _repeatCooldownProp = _so.FindProperty("RepeatCooldownPhases");
         }
         _so.Update();
     }

@@ -14,6 +14,10 @@ public sealed class QuestProgress
 
     [SerializeField] private bool completionRewardsGranted;
 
+    // TimeManager.TotalPhasesElapsed at last completion; -1 = never completed.
+    // Used to gate repeatable-quest cooldowns.
+    [SerializeField] private long lastCompletedPhase = -1;
+
     public string QuestId => questId;
     public int CurrentStepIndex { get => currentStepIndex; set => currentStepIndex = value; }
     public bool ManualStepCompleted { get => manualStepCompleted; set => manualStepCompleted = value; }
@@ -28,6 +32,12 @@ public sealed class QuestProgress
         set => completionRewardsGranted = value;
     }
 
+    public long LastCompletedPhase
+    {
+        get => lastCompletedPhase;
+        set => lastCompletedPhase = value;
+    }
+
     public int LastConsumedTalkToken;
 
     public QuestProgress(string questId)
@@ -39,6 +49,7 @@ public sealed class QuestProgress
         timesCompleted = 0;
         lastUpdatedUtc = DateTime.UtcNow.ToString("O");
         completionRewardsGranted = false;
+        lastCompletedPhase = -1;
     }
 
     public QuestProgress Clone()
@@ -50,7 +61,8 @@ public sealed class QuestProgress
             timesStarted = this.timesStarted,
             timesCompleted = this.timesCompleted,
             lastUpdatedUtc = this.lastUpdatedUtc,
-            completionRewardsGranted = this.completionRewardsGranted
+            completionRewardsGranted = this.completionRewardsGranted,
+            lastCompletedPhase = this.lastCompletedPhase
         };
     }
 }

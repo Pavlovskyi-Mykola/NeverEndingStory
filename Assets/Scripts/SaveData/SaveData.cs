@@ -27,8 +27,9 @@ public static class SaveVersions
     public const int TrackedQuestAndSlots = 2;
     public const int CareerProgression = 3;
     public const int CorporateStats = 4;
+    public const int QuestStartAndRepeat = 5;
 
-    public const int Current = CorporateStats;
+    public const int Current = QuestStartAndRepeat;
 }
 
 [Serializable]
@@ -58,6 +59,7 @@ public sealed class TimeSave
 {
     public int dayOfWeek;
     public int timeOfDay;
+    public long totalPhasesElapsed;
 }
 
 [Serializable]
