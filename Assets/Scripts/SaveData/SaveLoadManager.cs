@@ -361,12 +361,20 @@ public sealed class SaveLoadManager : MonoBehaviour
 
     public void ClearCurrentSlotAndRuntimeState()
     {
+        DeleteSaveFile(activeSlotId);
+        ResetRuntimeState();
+    }
+
+    /// <summary>
+    /// Resets all gameplay managers to a fresh-game state without touching save files.
+    /// Used by "Start New Game".
+    /// </summary>
+    public void ResetRuntimeState()
+    {
         // A dialogue running across a reset would keep stale graph state and leave
         // IsInDialogue stuck; abort skips trailing commands/NpcTalked on purpose.
         if (DialogueRunner.Instance != null)
             DialogueRunner.Instance.AbortDialogue();
-
-        DeleteSaveFile(activeSlotId);
 
         if (PlayerStatsManager.Instance != null)
             PlayerStatsManager.Instance.RestoreState(new PlayerStatsSave());
@@ -383,12 +391,58 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (QuestJournal.Instance != null)
             QuestJournal.Instance.RestoreSnapshot(new QuestJournal.Snapshot());
 
+        if (CareerManager.Instance != null)
+            CareerManager.Instance.RestoreSnapshot(new CareerManager.Snapshot());
+
         if (TimeManager.Instance != null)
             TimeManager.Instance.RestoreState(new TimeSave
             {
                 dayOfWeek = (int)DayOfWeek.Monday,
                 timeOfDay = (int)TimeOfDay.Morning
             });
+    }
+
+    /// <summary>True if any save file exists in any slot (manual or autosave).</summary>
+    public bool HasAnySave() => GetMostRecentSlotId() != null;
+
+    /// <summary>The slot id of the most recently written save across all files, or null if none.</summary>
+    public string GetMostRecentSlotId()
+    {
+        if (!Directory.Exists(SaveFolder))
+            return null;
+
+        string newest = null;
+        DateTime newestTime = DateTime.MinValue;
+
+        foreach (var path in Directory.GetFiles(SaveFolder, "*.json"))
+        {
+            // GetFiles("*.json") can over-match on Windows; confirm the real extension.
+            if (!string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            DateTime t = File.GetLastWriteTimeUtc(path);
+            if (t > newestTime)
+            {
+                newestTime = t;
+                newest = path;
+            }
+        }
+
+        return newest != null ? Path.GetFileNameWithoutExtension(newest) : null;
+    }
+
+    /// <summary>Loads the most recent save (any slot). Returns false if there are none.</summary>
+    public async Task<bool> ContinueLatest()
+    {
+        string slotId = GetMostRecentSlotId();
+        if (string.IsNullOrEmpty(slotId))
+        {
+            if (verboseLogs)
+                Debug.Log("[SaveLoadManager] ContinueLatest: no saves found.");
+            return false;
+        }
+
+        return await LoadGame(slotId);
     }
 
     private void HandleTimeChanged(DayOfWeek day, TimeOfDay phase, TimeChangeSource source)
