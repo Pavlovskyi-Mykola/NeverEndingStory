@@ -139,6 +139,19 @@ public sealed class SaveLoadManager : MonoBehaviour
         return GameManager.Instance != null && GameManager.Instance.IsInGameplay;
     }
 
+    /// <summary>
+    /// Immediately saves to the next autosave slot if the player is in gameplay.
+    /// Returns true if a save was written. Use for explicit "save before quit".
+    /// </summary>
+    public bool TryAutosave(string label = "autosave")
+    {
+        if (_isLoading || !IsGameplayActive())
+            return false;
+
+        SaveGame(GetNextAutosaveSlotId(), label);
+        return true;
+    }
+
     /// <summary>Autosaves rotate: first empty autosave slot, otherwise the oldest one.</summary>
     private string GetNextAutosaveSlotId()
     {

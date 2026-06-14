@@ -29,6 +29,10 @@ public sealed class UIPanelManager : MonoBehaviour
     // Panels whose OnEnable ran before the manager woke up.
     private static readonly List<UIPanel> PendingShown = new();
 
+    // Non-UIPanel things (e.g. an Evo ModalWindow) that want to consume Escape
+    // before the manager closes the topmost panel. Last pushed = first asked.
+    private readonly List<Func<bool>> _escapeInterceptors = new();
+
     /// <summary>(groupId, hidden) — raised when a hide-group starts/stops being hidden.</summary>
     public static event Action<string, bool> HideGroupChanged;
 
@@ -76,8 +80,35 @@ public sealed class UIPanelManager : MonoBehaviour
 
     private void Update()
     {
-        if (handleEscapeKey && Input.GetKeyDown(KeyCode.Escape))
-            CloseTopmost();
+        if (!handleEscapeKey || !Input.GetKeyDown(KeyCode.Escape))
+            return;
+
+        // Let interceptors (open modals that aren't UIPanels) consume Escape first.
+        for (int i = _escapeInterceptors.Count - 1; i >= 0; i--)
+        {
+            var interceptor = _escapeInterceptors[i];
+            if (interceptor != null && interceptor())
+                return;
+        }
+
+        CloseTopmost();
+    }
+
+    /// <summary>
+    /// Registers a callback that gets first crack at the Escape key. Return true from
+    /// it to consume Escape (the manager then won't close the topmost panel that frame).
+    /// </summary>
+    public void PushEscapeInterceptor(Func<bool> interceptor)
+    {
+        if (interceptor == null) return;
+        _escapeInterceptors.Remove(interceptor);
+        _escapeInterceptors.Add(interceptor);
+    }
+
+    public void RemoveEscapeInterceptor(Func<bool> interceptor)
+    {
+        if (interceptor != null)
+            _escapeInterceptors.Remove(interceptor);
     }
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode) => RegisterScenePanels();

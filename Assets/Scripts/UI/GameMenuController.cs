@@ -19,7 +19,6 @@ public sealed class GameMenuController : MonoBehaviour
     [Header("Page indices (must match the Pages list order)")]
     [SerializeField] private int settingsPage = 0;
     [SerializeField] private int saveLoadPage = 1;
-    [SerializeField] private int exitPage = 2;
 
     private int _pendingPage = -1;
 
@@ -32,7 +31,6 @@ public sealed class GameMenuController : MonoBehaviour
     public void Open() => OpenInternal(-1);
     public void OpenSettings() => OpenInternal(settingsPage);
     public void OpenSaveLoad() => OpenInternal(saveLoadPage);
-    public void OpenExit() => OpenInternal(exitPage);
     public void OpenToPage(int index) => OpenInternal(index);
 
     public void Close()
