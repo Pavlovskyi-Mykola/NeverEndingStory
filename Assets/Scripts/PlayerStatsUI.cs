@@ -1,27 +1,48 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class PlayerStatsUI : MonoBehaviour
 {
-    [SerializeField] private Text moneyText;
-    [SerializeField] private Text influenceText;
-    [SerializeField] private Text strategyText;
-    [SerializeField] private Text networkingText;
-    [SerializeField] private Text reputationText;
+    [Header("Money (assign TMP or legacy — either works)")]
+    [SerializeField] private TMP_Text moneyTMP;
+    [SerializeField] private Text moneyLegacy;
+
+    [Header("Influence")]
+    [SerializeField] private TMP_Text influenceTMP;
+    [SerializeField] private Text influenceLegacy;
+
+    [Header("Strategy")]
+    [SerializeField] private TMP_Text strategyTMP;
+    [SerializeField] private Text strategyLegacy;
+
+    [Header("Networking")]
+    [SerializeField] private TMP_Text networkingTMP;
+    [SerializeField] private Text networkingLegacy;
+
+    [Header("Reputation")]
+    [SerializeField] private TMP_Text reputationTMP;
+    [SerializeField] private Text reputationLegacy;
 
     private void OnEnable()
     {
+        PlayerStatsManager.InstanceReady += HandleManagerReady;
         if (PlayerStatsManager.Instance != null)
-        {
-            PlayerStatsManager.Instance.OnStatsChanged += Refresh;
-            Refresh();
-        }
+            HandleManagerReady(PlayerStatsManager.Instance);
     }
 
     private void OnDisable()
     {
+        PlayerStatsManager.InstanceReady -= HandleManagerReady;
         if (PlayerStatsManager.Instance != null)
             PlayerStatsManager.Instance.OnStatsChanged -= Refresh;
+    }
+
+    private void HandleManagerReady(PlayerStatsManager manager)
+    {
+        manager.OnStatsChanged -= Refresh;
+        manager.OnStatsChanged += Refresh;
+        Refresh();
     }
 
     private void Refresh()
@@ -29,10 +50,16 @@ public class PlayerStatsUI : MonoBehaviour
         var stats = PlayerStatsManager.Instance;
         if (stats == null) return;
 
-        if (moneyText != null) moneyText.text = $"Money: {stats.Money}";
-        if (influenceText != null) influenceText.text = $"Influence: {stats.Influence}";
-        if (strategyText != null) strategyText.text = $"Strategy: {stats.Strategy}";
-        if (networkingText != null) networkingText.text = $"Networking: {stats.Networking}";
-        if (reputationText != null) reputationText.text = $"Reputation: {stats.Reputation}";
+        SetLabel(moneyTMP, moneyLegacy, $"Money: {stats.Money}");
+        SetLabel(influenceTMP, influenceLegacy, $"Influence: {stats.Influence}");
+        SetLabel(strategyTMP, strategyLegacy, $"Strategy: {stats.Strategy}");
+        SetLabel(networkingTMP, networkingLegacy, $"Networking: {stats.Networking}");
+        SetLabel(reputationTMP, reputationLegacy, $"Reputation: {stats.Reputation}");
+    }
+
+    private static void SetLabel(TMP_Text tmp, Text legacy, string value)
+    {
+        if (tmp != null) tmp.text = value;
+        if (legacy != null) legacy.text = value;
     }
 }

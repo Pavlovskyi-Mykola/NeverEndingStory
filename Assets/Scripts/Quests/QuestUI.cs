@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public sealed class QuestUI : MonoBehaviour
 {
@@ -16,10 +17,10 @@ public sealed class QuestUI : MonoBehaviour
     [SerializeField] private QuestListItemUI listItemPrefab;
 
     [Header("Tracked Quest Details")]
-    [SerializeField] private Text titleText;
-    [SerializeField] private Text descriptionText;
-    [SerializeField] private Text objectiveText;
-    [SerializeField] private Text statusText;
+    [SerializeField] private TMP_Text titleText;
+    [SerializeField] private TMP_Text descriptionText;
+    [SerializeField] private TMP_Text objectiveText;
+    [SerializeField] private TMP_Text statusText;
 
     [Header("Options")]
     [SerializeField] private bool showCompletedInList = false;

@@ -1,11 +1,12 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public sealed class QuestListItemUI : MonoBehaviour
 {
     [SerializeField] private Button button;
-    [SerializeField] private Text label;
+    [SerializeField] private TMP_Text label;
     [SerializeField] private Image background;
     [SerializeField] private Color normalColor = Color.white;
     [SerializeField] private Color selectedColor = new Color(0.85f, 0.85f, 0.65f, 1f);
@@ -43,7 +44,7 @@ public sealed class QuestListItemUI : MonoBehaviour
         button = GetComponent<Button>();
 
         if (label == null)
-            label = GetComponentInChildren<Text>();
+            label = GetComponentInChildren<TMP_Text>();
 
         if (background == null)
             background = GetComponent<Image>();

@@ -1,14 +1,19 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class TimeUI : MonoBehaviour
 {
-    [Header("Text UI")]
-    [SerializeField] private Text DayOfWeek;
-    [SerializeField] private Text TimeOfDay;
+    [Header("Day of week label (assign TMP or legacy — either works)")]
+    [SerializeField] private TMP_Text dayOfWeekTMP;
+    [SerializeField] private Text dayOfWeekLegacy;
+
+    [Header("Time of day label (assign TMP or legacy — either works)")]
+    [SerializeField] private TMP_Text timeOfDayTMP;
+    [SerializeField] private Text timeOfDayLegacy;
 
     [Header("Phase Image UI")]
-    [SerializeField] private Image TimeOfDayImage;
+    [SerializeField] private Image timeOfDayImage;
     [SerializeField] private Sprite morningSprite;
     [SerializeField] private Sprite afternoonSprite;
     [SerializeField] private Sprite eveningSprite;
@@ -16,28 +21,46 @@ public class TimeUI : MonoBehaviour
 
     private void OnEnable()
     {
+        // InstanceReady covers TimeManager waking up after us; the Instance check
+        // covers it waking up first — so the display works regardless of load order.
+        TimeManager.InstanceReady += HandleTimeManagerReady;
         if (TimeManager.Instance != null)
-        {
-            TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
-
-            // Initial refresh
-            HandleTimeChanged(TimeManager.Instance.DayOfWeek, TimeManager.Instance.TimeOfDay);
-        }
+            HandleTimeManagerReady(TimeManager.Instance);
     }
 
     private void OnDisable()
     {
+        TimeManager.InstanceReady -= HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
     }
 
+    private void HandleTimeManagerReady(TimeManager tm)
+    {
+        tm.OnTimeChanged -= HandleTimeChanged;
+        tm.OnTimeChanged += HandleTimeChanged;
+
+        // Initial refresh with the current time.
+        HandleTimeChanged(tm.DayOfWeek, tm.TimeOfDay);
+    }
+
     private void HandleTimeChanged(System.DayOfWeek day, TimeOfDay phase)
     {
-        if (DayOfWeek != null) DayOfWeek.text = day.ToString();
-        if (TimeOfDay != null) TimeOfDay.text = phase.ToString();
+        SetLabel(dayOfWeekTMP, dayOfWeekLegacy, day.ToString());
+        SetLabel(timeOfDayTMP, timeOfDayLegacy, phase.ToString());
 
-        if (TimeOfDayImage != null)
-            TimeOfDayImage.sprite = GetSpriteForPhase(phase);
+        if (timeOfDayImage != null)
+        {
+            var sprite = GetSpriteForPhase(phase);
+            timeOfDayImage.enabled = sprite != null;
+            timeOfDayImage.sprite = sprite;
+        }
+    }
+
+    private static void SetLabel(TMP_Text tmp, Text legacy, string value)
+    {
+        if (tmp != null) tmp.text = value;
+        if (legacy != null) legacy.text = value;
     }
 
     private Sprite GetSpriteForPhase(TimeOfDay phase)
@@ -63,5 +86,4 @@ public class TimeUI : MonoBehaviour
         if (TimeManager.Instance == null) return;
         TimeManager.Instance.SleepToMorning(TimeChangeSource.PlayerUI);
     }
-
 }

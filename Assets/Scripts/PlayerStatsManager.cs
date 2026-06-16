@@ -4,6 +4,7 @@ using UnityEngine;
 public class PlayerStatsManager : MonoBehaviour
 {
     public static PlayerStatsManager Instance { get; private set; }
+    public static event Action<PlayerStatsManager> InstanceReady;
 
     [Header("Stats")]
     [SerializeField] private int money = 0;
@@ -31,6 +32,7 @@ public class PlayerStatsManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        InstanceReady?.Invoke(this);
         RaiseChanged();
     }
 
@@ -59,53 +61,6 @@ public class PlayerStatsManager : MonoBehaviour
         RaiseChanged();
     }
 
-    public void AddMoney(int amount)
-    {
-        if (amount <= 0) return;
-        money += amount;
-        RaiseChanged();
-    }
-
-    public bool CanAfford(int cost) => cost <= money;
-
-    public bool TrySpendMoney(int cost)
-    {
-        if (cost <= 0) return true;
-        if (money < cost) return false;
-
-        money -= cost;
-        RaiseChanged();
-        return true;
-    }
-
-    public void AddInfluence(int amount)
-    {
-        if (amount <= 0) return;
-        influence += amount;
-        RaiseChanged();
-    }
-
-    public void AddStrategy(int amount)
-    {
-        if (amount <= 0) return;
-        strategy += amount;
-        RaiseChanged();
-    }
-
-    public void AddNetworking(int amount)
-    {
-        if (amount <= 0) return;
-        networking += amount;
-        RaiseChanged();
-    }
-
-    public void AddReputation(int amount)
-    {
-        if (amount <= 0) return;
-        reputation += amount;
-        RaiseChanged();
-    }
-
     public int Get(StatType stat) => stat switch
     {
         StatType.Money => money,
@@ -116,30 +71,43 @@ public class PlayerStatsManager : MonoBehaviour
         _ => 0
     };
 
+    /// <summary>
+    /// Applies a signed delta to a stat, clamped at 0. Negative amounts work
+    /// (e.g. quest/dialogue penalties); amount 0 is a no-op.
+    /// </summary>
     public void Add(StatType stat, int amount)
     {
+        if (amount == 0) return;
+
         switch (stat)
         {
-            case StatType.Money:      AddMoney(amount);      break;
-            case StatType.Influence:  AddInfluence(amount);  break;
-            case StatType.Strategy:   AddStrategy(amount);   break;
-            case StatType.Networking: AddNetworking(amount); break;
-            case StatType.Reputation: AddReputation(amount); break;
+            case StatType.Money:      money      = Mathf.Max(0, money + amount);      break;
+            case StatType.Influence:  influence  = Mathf.Max(0, influence + amount);  break;
+            case StatType.Strategy:   strategy   = Mathf.Max(0, strategy + amount);   break;
+            case StatType.Networking: networking = Mathf.Max(0, networking + amount); break;
+            case StatType.Reputation: reputation = Mathf.Max(0, reputation + amount); break;
+            default: return;
         }
+
+        RaiseChanged();
     }
 
-    public bool MeetsRequirements(
-        int requiredMoney,
-        int requiredInfluence,
-        int requiredStrategy,
-        int requiredNetworking,
-        int requiredReputation)
+    public void AddMoney(int amount) => Add(StatType.Money, amount);
+    public void AddInfluence(int amount) => Add(StatType.Influence, amount);
+    public void AddStrategy(int amount) => Add(StatType.Strategy, amount);
+    public void AddNetworking(int amount) => Add(StatType.Networking, amount);
+    public void AddReputation(int amount) => Add(StatType.Reputation, amount);
+
+    public bool CanAfford(int cost) => cost <= money;
+
+    /// <summary>Spends money only if affordable. Use for purchases; use Add for rewards/penalties.</summary>
+    public bool TrySpendMoney(int cost)
     {
-        if (money < requiredMoney) return false;
-        if (influence < requiredInfluence) return false;
-        if (strategy < requiredStrategy) return false;
-        if (networking < requiredNetworking) return false;
-        if (reputation < requiredReputation) return false;
+        if (cost <= 0) return true;
+        if (money < cost) return false;
+
+        money -= cost;
+        RaiseChanged();
         return true;
     }
 

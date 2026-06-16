@@ -31,8 +31,6 @@ public class DialogueUI : MonoBehaviour
     private readonly List<DialogueLineUI> _spawnedLines = new();
     private readonly List<Button> _spawnedChoiceButtons = new();
 
-    private bool _subscribed;
-
     private DialogueTurnAction _currentAction;
 
     private bool _hasPendingPlayerReply;
@@ -41,44 +39,40 @@ public class DialogueUI : MonoBehaviour
 
     private void Awake()
     {
-        TrySubscribe();
         if (panelRoot != null) panelRoot.SetActive(false);
     }
 
     private void OnEnable()
     {
-        TrySubscribe();
+        // InstanceReady covers the runner waking up after us; the Instance check
+        // covers it waking up first — so the UI never misses turn events.
+        DialogueRunner.InstanceReady += HandleRunnerReady;
+        if (DialogueRunner.Instance != null)
+            HandleRunnerReady(DialogueRunner.Instance);
+
         if (continueButton != null)
             continueButton.onClick.AddListener(OnContinueClicked);
     }
 
     private void OnDisable()
     {
-        if (continueButton != null)
-            continueButton.onClick.RemoveListener(OnContinueClicked);
-
-        Unsubscribe();
-    }
-
-    private void TrySubscribe()
-    {
-        if (_subscribed) return;
-        if (DialogueRunner.Instance == null) return;
-
-        DialogueRunner.Instance.OnTurn += HandleTurn;
-        DialogueRunner.Instance.OnHideDialogue += HandleHide;
-        _subscribed = true;
-    }
-
-    private void Unsubscribe()
-    {
-        if (!_subscribed) return;
+        DialogueRunner.InstanceReady -= HandleRunnerReady;
         if (DialogueRunner.Instance != null)
         {
             DialogueRunner.Instance.OnTurn -= HandleTurn;
             DialogueRunner.Instance.OnHideDialogue -= HandleHide;
         }
-        _subscribed = false;
+
+        if (continueButton != null)
+            continueButton.onClick.RemoveListener(OnContinueClicked);
+    }
+
+    private void HandleRunnerReady(DialogueRunner runner)
+    {
+        runner.OnTurn -= HandleTurn;
+        runner.OnTurn += HandleTurn;
+        runner.OnHideDialogue -= HandleHide;
+        runner.OnHideDialogue += HandleHide;
     }
 
     private void HandleTurn(DialogueTurn turn)
