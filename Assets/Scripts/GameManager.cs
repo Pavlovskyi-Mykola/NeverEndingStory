@@ -4,6 +4,13 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+public enum TravelBlockReason
+{
+    FloorLocked,  // career tier hasn't unlocked this floor
+    TimeWindow,   // location is closed at the current day/phase
+    MissingItems  // entry requirements (items) not met
+}
+
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
@@ -55,6 +62,7 @@ public class GameManager : MonoBehaviour
     public event Action<string> SceneUnloadCompleted;
     public event Action<SceneReference> LocationLoadStarted;
     public event Action<SceneReference> LocationReady; // <- scene loaded + active + CurrentLocationRef updated
+    public event Action<SceneReference, TravelBlockReason> TravelBlocked; // rejected travel attempt (player feedback)
     public static event System.Action<GameManager> InstanceReady;
 
     private bool _isForcingRelocation;
@@ -363,6 +371,7 @@ public class GameManager : MonoBehaviour
             if (IsBlockedByCareer(targetLocation))
             {
                 Debug.Log($"Blocked travel to '{targetLocation.SceneName}' because floor is not unlocked yet.");
+                TravelBlocked?.Invoke(targetLocation, TravelBlockReason.FloorLocked);
                 return;
             }
 
@@ -374,7 +383,14 @@ public class GameManager : MonoBehaviour
 
                 if (!sceneDatabase.CanEnterNow(targetLocation, day, phase, inventory))
                 {
-                    Debug.Log($"Blocked travel to '{targetLocation.SceneName}' due to requirements.");
+                    // Time window and item requirements are both checked by CanEnterNow;
+                    // re-check the time window alone to report the right reason.
+                    var reason = sceneDatabase.IsAllowedNow(targetLocation, day, phase)
+                        ? TravelBlockReason.MissingItems
+                        : TravelBlockReason.TimeWindow;
+
+                    Debug.Log($"Blocked travel to '{targetLocation.SceneName}' due to requirements ({reason}).");
+                    TravelBlocked?.Invoke(targetLocation, reason);
                     return;
                 }
             }

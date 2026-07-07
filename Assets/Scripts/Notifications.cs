@@ -5,7 +5,11 @@ public enum NotificationType
     Info,
     QuestStarted,
     QuestUpdated,
-    QuestCompleted
+    QuestCompleted,
+    StatChange,
+    ItemChange,
+    Promotion,
+    Blocked
 }
 
 public readonly struct NotificationRequest
@@ -33,6 +37,16 @@ public static class Notifications
 
     public static void Post(string title, string message, NotificationType type = NotificationType.Info)
     {
+        // Centralized suppression, checked once for every producer:
+        // - never toast while a save is restoring (restore re-fires StatsChanged /
+        //   InventoryChanged for the entire loaded state), and
+        // - never toast outside gameplay (main menu).
+        if (SaveLoadManager.Instance != null && SaveLoadManager.Instance.IsLoading)
+            return;
+
+        if (GameManager.Instance == null || !GameManager.Instance.IsInGameplay)
+            return;
+
         Posted?.Invoke(new NotificationRequest(title, message, type));
     }
 }
