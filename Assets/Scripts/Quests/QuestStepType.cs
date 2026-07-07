@@ -11,4 +11,5 @@ public enum QuestStepType
     PayMoney = 15,
     TimeWindow = 16,
     FlagTrue = 17,
+    CompleteMiniGame = 18,
 }

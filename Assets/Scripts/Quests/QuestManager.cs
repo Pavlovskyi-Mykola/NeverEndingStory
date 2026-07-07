@@ -23,6 +23,10 @@ public sealed class QuestManager : MonoBehaviour
     private string _lastTalkNpcId = null;
     private string _lastTalkDialogueId = null;
 
+    private int _miniGameToken = 0;
+    private string _lastMiniGameId = null;
+    private MiniGameTier _lastMiniGameTier = MiniGameTier.Failed;
+
     // Game events mark quests dirty; advancement runs once per frame in LateUpdate.
     // This collapses event bursts (e.g. a reward setting several flags) into a single
     // pass and keeps the advance loop from re-entering itself when completing a
@@ -57,6 +61,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.NpcTalked += HandleNpcTalked;
         GameEvents.FlagChanged += HandleFlagChanged;
         GameEvents.InventoryChanged += HandleInventoryChanged;
+        GameEvents.MiniGameCompleted += HandleMiniGameCompleted;
     }
 
     private void OnDisable()
@@ -67,6 +72,7 @@ public sealed class QuestManager : MonoBehaviour
         GameEvents.NpcTalked -= HandleNpcTalked;
         GameEvents.FlagChanged -= HandleFlagChanged;
         GameEvents.InventoryChanged -= HandleInventoryChanged;
+        GameEvents.MiniGameCompleted -= HandleMiniGameCompleted;
     }
 
     //flags become a first-class quest trigger
@@ -83,6 +89,15 @@ public sealed class QuestManager : MonoBehaviour
         _talkToken++;
         _lastTalkNpcId = npcId;
         _lastTalkDialogueId = dialogueId;
+
+        MarkQuestsDirty();
+    }
+
+    private void HandleMiniGameCompleted(string miniGameId, MiniGameTier tier)
+    {
+        _miniGameToken++;
+        _lastMiniGameId = miniGameId;
+        _lastMiniGameTier = tier;
 
         MarkQuestsDirty();
     }
@@ -229,9 +244,10 @@ public sealed class QuestManager : MonoBehaviour
         prog.ManualStepCompleted = false;
         prog.CompletionRewardsGranted = false;
 
-        // Talks that happened before this quest existed must not satisfy its
-        // TalkToDialogue steps — consume the current token up front.
+        // Talks/mini-games that happened before this quest existed must not satisfy
+        // its steps — consume the current tokens up front.
         prog.LastConsumedTalkToken = _talkToken;
+        prog.LastConsumedMiniGameToken = _miniGameToken;
 
         QueueEvent(QuestEventKind.Started, questId, 0);
 
@@ -335,6 +351,9 @@ public sealed class QuestManager : MonoBehaviour
 
             if (step.Type == QuestStepType.TalkToDialogue)
                 prog.LastConsumedTalkToken = _talkToken;
+
+            if (step.Type == QuestStepType.CompleteMiniGame)
+                prog.LastConsumedMiniGameToken = _miniGameToken;
 
             prog.CurrentStepIndex++;
             prog.ManualStepCompleted = false;
@@ -537,6 +556,22 @@ public sealed class QuestManager : MonoBehaviour
 
             case QuestStepType.FlagTrue:
                 return !string.IsNullOrWhiteSpace(step.RequiredFlagId) && WorldFlags.Get(step.RequiredFlagId);
+
+            case QuestStepType.CompleteMiniGame:
+                {
+                    // One result can't complete two consecutive mini-game steps.
+                    if (prog.LastConsumedMiniGameToken == _miniGameToken)
+                        return false;
+
+                    if (string.IsNullOrEmpty(step.TargetMiniGameId))
+                        return false;
+
+                    if (!string.Equals(step.TargetMiniGameId, _lastMiniGameId, StringComparison.Ordinal))
+                        return false;
+
+                    // MinimumTier = Failed means any attempt counts, even a loss.
+                    return _lastMiniGameTier >= step.MinimumTier;
+                }
 
             case QuestStepType.TalkToDialogue:
                 {

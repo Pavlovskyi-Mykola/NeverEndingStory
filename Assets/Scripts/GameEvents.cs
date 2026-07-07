@@ -101,6 +101,19 @@ public static class GameEvents
     }
 
     // -----------------
+    // Mini games
+    // -----------------
+
+    /// <summary>Raised when a mini-game finishes (any outcome, including Failed).</summary>
+    public static event Action<string, MiniGameTier> MiniGameCompleted; // (miniGameId, tier)
+
+    public static void RaiseMiniGameCompleted(string miniGameId, MiniGameTier tier)
+    {
+        if (string.IsNullOrEmpty(miniGameId)) return;
+        MiniGameCompleted?.Invoke(miniGameId, tier);
+    }
+
+    // -----------------
     // World flags
     // -----------------
 

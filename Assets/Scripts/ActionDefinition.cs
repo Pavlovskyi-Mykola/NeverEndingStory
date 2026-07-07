@@ -15,7 +15,10 @@ public enum ActionFailReason
     MissingRequiredItem,
     MissingCostItem,
     BlockedByUI,
-    NotEnoughEnergy
+    NotEnoughEnergy,
+    NotAtLocation,
+    RequiredQuestNotActive,
+    MiniGameUnavailable
 }
 
 public enum TimeSkipMode
@@ -35,6 +38,14 @@ public class ActionDefinition : ScriptableObject
     [Header("Availability")]
     public bool RestrictByPhase = false;
     public TimeOfDay[] AllowedPhases = Array.Empty<TimeOfDay>();
+
+    [Tooltip("Scene names or SceneDatabase location ids where this action is available. Empty = anywhere.")]
+    public string[] AllowedLocations = Array.Empty<string>();
+
+    [Tooltip("Only available while this quest is active. Empty = always available.")]
+    [QuestId] public string RequiredActiveQuestId;
+    [Tooltip("Optional: the quest must also be on this exact step id.")]
+    public string RequiredActiveStepId;
 
     [Header("Stat Requirements")]
     public int RequiredMoney = 0;
@@ -66,6 +77,22 @@ public class ActionDefinition : ScriptableObject
 
     [Header("Time")]
     public TimeSkipMode TimeSkip = TimeSkipMode.None;
+
+    [Header("Mini Game (optional)")]
+    [Tooltip("When set, executing launches this mini-game: costs are paid up front, rewards apply on completion scaled by the result tier, and the time skip runs afterward regardless of outcome.")]
+    public MiniGameDefinition MiniGame;
+    [Tooltip("Stat-reward multiplier per tier. Item rewards and Energy Restore are granted in full on any success; nothing is granted on a fail.")]
+    public float BronzeRewardMultiplier = 0.5f;
+    public float SilverRewardMultiplier = 1f;
+    public float GoldRewardMultiplier = 1.5f;
+
+    public float GetRewardMultiplier(MiniGameTier tier) => tier switch
+    {
+        MiniGameTier.Bronze => BronzeRewardMultiplier,
+        MiniGameTier.Silver => SilverRewardMultiplier,
+        MiniGameTier.Gold   => GoldRewardMultiplier,
+        _ => 0f
+    };
 
     public int GetRequirement(StatType stat) => stat switch
     {

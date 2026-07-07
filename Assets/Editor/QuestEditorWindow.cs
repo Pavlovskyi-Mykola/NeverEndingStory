@@ -486,6 +486,13 @@ public class QuestEditorWindow : EditorWindow
                 break;
             }
 
+            case QuestStepType.CompleteMiniGame:
+                EditorGUILayout.PropertyField(stepProp.FindPropertyRelative("TargetMiniGameId"),
+                    new GUIContent("Mini Game Id", "Matches MiniGameDefinition.MiniGameId."));
+                EditorGUILayout.PropertyField(stepProp.FindPropertyRelative("MinimumTier"),
+                    new GUIContent("Minimum Tier", "Lowest result that advances the step. Failed = any attempt counts."));
+                break;
+
             case QuestStepType.TimeWindow:
             case QuestStepType.Manual:
             case QuestStepType.AutoComplete:
@@ -779,6 +786,12 @@ public class QuestEditorWindow : EditorWindow
                 return $"Flag '{flagId}' is not declared in the FlagDatabase. Typo?";
         }
 
+        if (type == QuestStepType.CompleteMiniGame)
+        {
+            if (string.IsNullOrWhiteSpace(s.FindPropertyRelative("TargetMiniGameId")?.stringValue))
+                return "Target mini game id is not set.";
+        }
+
         return null;
     }
 
@@ -870,6 +883,13 @@ public class QuestEditorWindow : EditorWindow
             {
                 string fid = s.FindPropertyRelative("RequiredFlagId")?.stringValue ?? "";
                 return string.IsNullOrEmpty(fid) ? "Progress (choose flag below)" : $"Waiting for: {fid}";
+            }
+            case QuestStepType.CompleteMiniGame:
+            {
+                string mid = s.FindPropertyRelative("TargetMiniGameId")?.stringValue ?? "";
+                int minTier = s.FindPropertyRelative("MinimumTier")?.intValue ?? 1;
+                string label = string.IsNullOrEmpty(mid) ? "<choose mini game>" : mid;
+                return minTier <= 0 ? $"Attempt {label}" : $"Succeed at {label}";
             }
             case QuestStepType.TimeWindow:
             {

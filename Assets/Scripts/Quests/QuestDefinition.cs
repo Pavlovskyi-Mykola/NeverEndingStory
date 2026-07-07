@@ -133,4 +133,9 @@ public class QuestStepDefinition
 
     [Header("World Flag (FlagTrue)")]
     [FlagId] public string RequiredFlagId;
+
+    [Header("Mini Game (CompleteMiniGame)")]
+    public string TargetMiniGameId;
+    [Tooltip("Lowest result that advances the step. Failed = any attempt counts, even a loss.")]
+    public MiniGameTier MinimumTier = MiniGameTier.Bronze;
 }

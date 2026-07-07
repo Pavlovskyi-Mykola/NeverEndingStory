@@ -39,6 +39,7 @@ public sealed class QuestProgress
     }
 
     public int LastConsumedTalkToken;
+    public int LastConsumedMiniGameToken;
 
     public QuestProgress(string questId)
     {
