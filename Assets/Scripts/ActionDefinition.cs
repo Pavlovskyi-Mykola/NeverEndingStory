@@ -75,6 +75,9 @@ public class ActionDefinition : ScriptableObject
     public int ReputationReward = 0;
     public ItemAmount[] ItemRewards = Array.Empty<ItemAmount>();
 
+    [Tooltip("World flags set when the action succeeds (any non-failed tier for mini-game actions) — e.g. intel.bob.expense_fraud after a successful audit.")]
+    public FlagChange[] SuccessFlags = Array.Empty<FlagChange>();
+
     [Header("Time")]
     public TimeSkipMode TimeSkip = TimeSkipMode.None;
 

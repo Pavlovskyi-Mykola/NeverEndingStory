@@ -335,6 +335,11 @@ public class ActionService : MonoBehaviour
                 inventory.AddItem(reward.ItemId, Mathf.Max(1, reward.Count));
             }
         }
+
+        // Intel/state output — only reached on success (GrantRewards is skipped
+        // when a mini-game fails), so failed espionage yields no flags.
+        if (action.SuccessFlags != null && action.SuccessFlags.Length > 0)
+            WorldFlags.Apply(action.SuccessFlags);
     }
 
     private static void ApplyTimeSkip(ActionDefinition action)
