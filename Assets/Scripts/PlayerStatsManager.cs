@@ -13,13 +13,25 @@ public class PlayerStatsManager : MonoBehaviour
     [SerializeField] private int networking = 1;
     [SerializeField] private int reputation = 1;
 
+    [Header("Energy")]
+    [Tooltip("Design default for a fresh game. Runtime max can grow via AddMaxEnergy (promotions).")]
+    [SerializeField] private int defaultMaxEnergy = 10;
+
+    // Energy is a spend-and-refill resource (like Money), not a StatType progression
+    // stat — it deliberately stays out of StatsSnapshot/quest requirements/toast deltas.
+    private int maxEnergy;
+    private int energy;
+
     public int Money => money;
     public int Influence => influence;
     public int Strategy => strategy;
     public int Networking => networking;
     public int Reputation => reputation;
+    public int Energy => energy;
+    public int MaxEnergy => maxEnergy;
 
     public event Action OnStatsChanged;
+    public event Action OnEnergyChanged;
 
     private void Awake()
     {
@@ -32,8 +44,12 @@ public class PlayerStatsManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        maxEnergy = Mathf.Max(1, defaultMaxEnergy);
+        energy = maxEnergy;
+
         InstanceReady?.Invoke(this);
         RaiseChanged();
+        RaiseEnergyChanged();
     }
 
     public PlayerStatsSave CaptureState()
@@ -44,7 +60,9 @@ public class PlayerStatsManager : MonoBehaviour
             influence = influence,
             strategy = strategy,
             networking = networking,
-            reputation = reputation
+            reputation = reputation,
+            energy = energy,
+            maxEnergy = maxEnergy
         };
     }
 
@@ -58,7 +76,13 @@ public class PlayerStatsManager : MonoBehaviour
         networking = Mathf.Max(0, data.networking);
         reputation = Mathf.Max(0, data.reputation);
 
+        // -1 sentinels: fresh game (new PlayerStatsSave) and pre-energy saves both
+        // fall back to the design default at full charge.
+        maxEnergy = data.maxEnergy > 0 ? data.maxEnergy : Mathf.Max(1, defaultMaxEnergy);
+        energy = data.energy >= 0 ? Mathf.Min(data.energy, maxEnergy) : maxEnergy;
+
         RaiseChanged();
+        RaiseEnergyChanged();
     }
 
     public int Get(StatType stat) => stat switch
@@ -109,6 +133,56 @@ public class PlayerStatsManager : MonoBehaviour
         money -= cost;
         RaiseChanged();
         return true;
+    }
+
+    // -----------------------
+    // Energy
+    // -----------------------
+
+    public bool HasEnergy(int cost) => cost <= energy;
+
+    public bool TrySpendEnergy(int cost)
+    {
+        if (cost <= 0) return true;
+        if (energy < cost) return false;
+
+        energy -= cost;
+        RaiseEnergyChanged();
+        return true;
+    }
+
+    public void RestoreEnergy(int amount)
+    {
+        if (amount <= 0) return;
+
+        int next = Mathf.Min(maxEnergy, energy + amount);
+        if (next == energy) return;
+
+        energy = next;
+        RaiseEnergyChanged();
+    }
+
+    public void RestoreEnergyFull()
+    {
+        if (energy == maxEnergy) return;
+
+        energy = maxEnergy;
+        RaiseEnergyChanged();
+    }
+
+    /// <summary>Grows (or shrinks) the max — e.g. +1 per promotion. Current energy is clamped, never refilled.</summary>
+    public void AddMaxEnergy(int amount)
+    {
+        if (amount == 0) return;
+
+        maxEnergy = Mathf.Max(1, maxEnergy + amount);
+        energy = Mathf.Min(energy, maxEnergy);
+        RaiseEnergyChanged();
+    }
+
+    private void RaiseEnergyChanged()
+    {
+        OnEnergyChanged?.Invoke();
     }
 
     private void RaiseChanged()

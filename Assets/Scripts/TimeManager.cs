@@ -122,6 +122,11 @@ public class TimeManager : MonoBehaviour
         timeOfDay = TimeOfDay.Morning;
         dayOfWeek = NextDay(dayOfWeek);
 
+        // Sleeping is the only full energy reset (skipping phases restores nothing).
+        // Restore before raising so listeners (quests, autosave) see the rested state.
+        if (PlayerStatsManager.Instance != null)
+            PlayerStatsManager.Instance.RestoreEnergyFull();
+
         RaiseTimeChanged(source);
     }
 }

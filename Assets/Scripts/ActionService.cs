@@ -31,6 +31,12 @@ public class ActionService : MonoBehaviour
         GameEvents.StatsChanged += HandleStatsChanged;
         GameEvents.TimeChanged += HandleTimeChanged;
         UIPanelManager.GameplayBlockedChanged += HandleGameplayBlockedChanged;
+
+        // Energy lives outside StatsSnapshot, so it needs its own hook for buttons
+        // to gray out when it runs low.
+        PlayerStatsManager.InstanceReady += HandleStatsManagerReady;
+        if (PlayerStatsManager.Instance != null)
+            HandleStatsManagerReady(PlayerStatsManager.Instance);
     }
 
     private void OnDisable()
@@ -39,6 +45,16 @@ public class ActionService : MonoBehaviour
         GameEvents.StatsChanged -= HandleStatsChanged;
         GameEvents.TimeChanged -= HandleTimeChanged;
         UIPanelManager.GameplayBlockedChanged -= HandleGameplayBlockedChanged;
+
+        PlayerStatsManager.InstanceReady -= HandleStatsManagerReady;
+        if (PlayerStatsManager.Instance != null)
+            PlayerStatsManager.Instance.OnEnergyChanged -= NotifyStateChanged;
+    }
+
+    private void HandleStatsManagerReady(PlayerStatsManager stats)
+    {
+        stats.OnEnergyChanged -= NotifyStateChanged;
+        stats.OnEnergyChanged += NotifyStateChanged;
     }
 
     private void HandleGameplayBlockedChanged(bool blocked)
@@ -144,6 +160,12 @@ public class ActionService : MonoBehaviour
             }
         }
 
+        if (action.EnergyCost > 0 && stats.Energy < action.EnergyCost)
+        {
+            reason = ActionFailReason.NotEnoughEnergy;
+            return false;
+        }
+
         if (stats.Money < action.MoneyCost)
         {
             reason = ActionFailReason.NotEnoughMoney;
@@ -184,6 +206,9 @@ public class ActionService : MonoBehaviour
         if (action.MoneyCost > 0 && !stats.TrySpendMoney(action.MoneyCost))
             Debug.LogWarning($"[ActionService] '{action.name}': money spend failed after CanExecute passed.");
 
+        if (action.EnergyCost > 0 && !stats.TrySpendEnergy(action.EnergyCost))
+            Debug.LogWarning($"[ActionService] '{action.name}': energy spend failed after CanExecute passed.");
+
         if (action.ItemCosts != null && inventory != null)
         {
             for (int i = 0; i < action.ItemCosts.Length; i++)
@@ -203,6 +228,9 @@ public class ActionService : MonoBehaviour
             int reward = action.GetReward(stat);
             if (reward > 0) stats.Add(stat, reward);
         }
+
+        if (action.EnergyRestore > 0)
+            stats.RestoreEnergy(action.EnergyRestore);
 
         if (action.ItemRewards != null && inventory != null)
         {

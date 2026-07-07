@@ -14,7 +14,8 @@ public enum ActionFailReason
     NotEnoughReputation,
     MissingRequiredItem,
     MissingCostItem,
-    BlockedByUI
+    BlockedByUI,
+    NotEnoughEnergy
 }
 
 public enum TimeSkipMode
@@ -48,6 +49,12 @@ public class ActionDefinition : ScriptableObject
     [Header("Costs")]
     public int MoneyCost = 0;
     public ItemAmount[] ItemCosts = Array.Empty<ItemAmount>();
+
+    [Header("Energy")]
+    [Tooltip("Energy spent on execute. Rough scale: heavy work 4, standard 2, light 1, free 0.")]
+    public int EnergyCost = 0;
+    [Tooltip("Energy restored on execute (e.g. Drink Coffee). Applied after the cost, clamped at max.")]
+    public int EnergyRestore = 0;
 
     [Header("Rewards")]
     public int MoneyReward = 0;

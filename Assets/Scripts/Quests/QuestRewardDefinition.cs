@@ -18,6 +18,12 @@ public sealed class QuestRewardDefinition
     [Header("Time")]
     public bool AdvanceTimePhase;
 
+    [Header("Energy")]
+    [Tooltip("Permanently raises max energy (e.g. +1 on promotion). Current energy is not refilled.")]
+    public int MaxEnergyBonus = 0;
+    [Tooltip("One-off energy refill, clamped at max.")]
+    public int RestoreEnergy = 0;
+
     [Header("Career / Promotion")]
     public bool ApplyPromotion;
     public CareerTier PromoteTo = CareerTier.Intern;
@@ -43,6 +49,15 @@ public sealed class QuestRewardDefinition
                 int amount = GetReward(StatTypes.All[i]);
                 if (amount != 0) stats.Add(StatTypes.All[i], amount);
             }
+        }
+
+        if (stats != null)
+        {
+            if (MaxEnergyBonus != 0)
+                stats.AddMaxEnergy(MaxEnergyBonus);
+
+            if (RestoreEnergy > 0)
+                stats.RestoreEnergy(RestoreEnergy);
         }
 
         WorldFlags.Apply(Flags);

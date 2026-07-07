@@ -28,8 +28,9 @@ public static class SaveVersions
     public const int CareerProgression = 3;
     public const int CorporateStats = 4;
     public const int QuestStartAndRepeat = 5;
+    public const int EnergyStat = 6;
 
-    public const int Current = QuestStartAndRepeat;
+    public const int Current = EnergyStat;
 }
 
 [Serializable]
@@ -52,6 +53,10 @@ public sealed class PlayerStatsSave
     public int strategy;
     public int networking;
     public int reputation;
+
+    // -1 = unset: fresh games and pre-energy saves restore to full/default.
+    public int energy = -1;
+    public int maxEnergy = -1;
 }
 
 [Serializable]
