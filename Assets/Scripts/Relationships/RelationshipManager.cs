@@ -27,7 +27,7 @@ public sealed class RelationshipManager : MonoBehaviour
     [Header("Anti-grind")]
     [Tooltip("Max points a single NPC can gain per in-game day. 0 = uncapped.")]
     [SerializeField] private int dailyGainCap = 5;
-    [Tooltip("Points granted for the first conversation with an NPC each day (counts toward the cap). 0 = off.")]
+    [Tooltip("Points for the first relationship-marked conversation with an NPC each day (counts toward the cap). Only dialogues with CountsAsRelationshipTalk enabled qualify. 0 = off.")]
     [SerializeField] private int firstTalkOfDayPoints = 1;
 
     [Header("Flag bridge")]
@@ -69,12 +69,12 @@ public sealed class RelationshipManager : MonoBehaviour
 
     private void OnEnable()
     {
-        GameEvents.NpcTalked += HandleNpcTalked;
+        GameEvents.RelationshipTalk += HandleRelationshipTalk;
     }
 
     private void OnDisable()
     {
-        GameEvents.NpcTalked -= HandleNpcTalked;
+        GameEvents.RelationshipTalk -= HandleRelationshipTalk;
     }
 
     // -----------------------
@@ -164,7 +164,7 @@ public sealed class RelationshipManager : MonoBehaviour
         OnRelationshipChanged?.Invoke(npcId);
     }
 
-    private void HandleNpcTalked(string npcId, string dialogueId)
+    private void HandleRelationshipTalk(string npcId)
     {
         if (firstTalkOfDayPoints <= 0 || string.IsNullOrEmpty(npcId))
             return;

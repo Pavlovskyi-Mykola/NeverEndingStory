@@ -153,13 +153,19 @@ public class DialogueRunner : MonoBehaviour
         // Cache before we clear state
         var finishedDialogueId = _activeDialogueId;
         var npcId = _hasContext ? _context.NpcId : null;
+        bool relationshipTalk = _graph != null && _graph.CountsAsRelationshipTalk;
 
         ClearRunState();
 
         // Notify systems that a talk with the NPC happened (after state is cleared,
         // so listeners that start new dialogues/actions see a non-running runner).
         if (!string.IsNullOrEmpty(npcId))
+        {
             GameEvents.RaiseNpcTalked(npcId, finishedDialogueId);
+
+            if (relationshipTalk)
+                GameEvents.RaiseRelationshipTalk(npcId);
+        }
 
         OnDialogueStateChanged?.Invoke(false);
         OnHideDialogue?.Invoke();

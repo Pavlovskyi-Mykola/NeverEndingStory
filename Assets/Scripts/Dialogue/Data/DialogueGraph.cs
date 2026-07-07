@@ -11,12 +11,17 @@ public class DialogueGraph : ScriptableObject
     [SerializeField]
     private string startNodeId;
 
+    [Tooltip("When on, finishing this conversation counts as relationship-building: the NPC's first-talk-of-day bonus applies. Leave off for small talk / functional dialogues.")]
+    [SerializeField]
+    private bool countsAsRelationshipTalk = false;
+
     // SerializeReference lets Unity store derived node types in a single list.
     [SerializeReference]
     private List<DialogueNode> nodes = new();
 
     public string DialogueId => dialogueId;
     public string StartNodeId => startNodeId;
+    public bool CountsAsRelationshipTalk => countsAsRelationshipTalk;
     public IReadOnlyList<DialogueNode> Nodes => nodes;
 
     private Dictionary<string, DialogueNode> _nodesById;

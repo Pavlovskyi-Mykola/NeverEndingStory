@@ -20,6 +20,18 @@ public static class GameEvents
         NpcTalked?.Invoke(npcId, dialogueId);
     }
 
+    /// <summary>
+    /// Raised when a finished dialogue was marked as relationship-building
+    /// (DialogueGraph.CountsAsRelationshipTalk). Subset of NpcTalked.
+    /// </summary>
+    public static event Action<string> RelationshipTalk; // (npcId)
+
+    public static void RaiseRelationshipTalk(string npcId)
+    {
+        if (string.IsNullOrEmpty(npcId)) return;
+        RelationshipTalk?.Invoke(npcId);
+    }
+
     // -----------------
     // Location / Travel
     // -----------------
