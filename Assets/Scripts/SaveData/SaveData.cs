@@ -20,6 +20,8 @@ public sealed class SaveData
     public DialogueJournal.Snapshot dialogues = new();
     public CareerManager.Snapshot career = new CareerManager.Snapshot();
     public RelationshipManager.Snapshot relationships = new();
+    public CalendarManager.Snapshot calendar = new();
+    public RandomEventManager.Snapshot randomEvents = new();
 }
 
 public static class SaveVersions
@@ -31,8 +33,9 @@ public static class SaveVersions
     public const int QuestStartAndRepeat = 5;
     public const int EnergyStat = 6;
     public const int Relationships = 7;
+    public const int CalendarEvents = 8;
 
-    public const int Current = Relationships;
+    public const int Current = CalendarEvents;
 }
 
 [Serializable]

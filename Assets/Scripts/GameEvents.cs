@@ -126,6 +126,40 @@ public static class GameEvents
     }
 
     // -----------------
+    // Calendar
+    // -----------------
+
+    /// <summary>Raised when a scheduled calendar event fires.</summary>
+    public static event Action<string> CalendarEventFired; // (eventId)
+
+    public static void RaiseCalendarEventFired(string eventId)
+    {
+        if (string.IsNullOrEmpty(eventId)) return;
+        CalendarEventFired?.Invoke(eventId);
+    }
+
+    /// <summary>
+    /// Raised when an event's phase was jumped over (e.g. sleeping) and the
+    /// event does not FireWhenSkipped — the player missed it.
+    /// </summary>
+    public static event Action<string> CalendarEventMissed; // (eventId)
+
+    public static void RaiseCalendarEventMissed(string eventId)
+    {
+        if (string.IsNullOrEmpty(eventId)) return;
+        CalendarEventMissed?.Invoke(eventId);
+    }
+
+    /// <summary>Raised when a random flavour event fires (RandomEventManager).</summary>
+    public static event Action<string> RandomEventFired; // (eventId)
+
+    public static void RaiseRandomEventFired(string eventId)
+    {
+        if (string.IsNullOrEmpty(eventId)) return;
+        RandomEventFired?.Invoke(eventId);
+    }
+
+    // -----------------
     // World flags
     // -----------------
 

@@ -201,7 +201,9 @@ public class DialogueRouteSetEditorWindow : EditorWindow
         }
 
         EditorGUILayout.HelpBox(
-            "Rules are evaluated top-to-bottom. The first rule whose conditions all pass is used. " +
+            "Eligible rules play in tier order: Quest > Event > Routine > SmallTalk. " +
+            "Within a tier, higher Priority wins, then list order (top-to-bottom). " +
+            "Auto tier = Quest when the rule is gated on an Active quest, otherwise Routine. " +
             "If nothing matches, the Fallback graph plays.",
             MessageType.None);
 
@@ -335,6 +337,17 @@ public class DialogueRouteSetEditorWindow : EditorWindow
             EditorGUILayout.PropertyField(rule.FindPropertyRelative("graph"),
                 new GUIContent("Graph"));
         }
+
+        GUILayout.Space(8);
+
+        // Priority
+        SectionLabel("Priority");
+        EditorGUILayout.PropertyField(rule.FindPropertyRelative("tier"),
+            new GUIContent("Tier",
+                "Quest > Event > Routine > SmallTalk. Auto = Quest when gated on an Active quest, otherwise Routine."));
+        EditorGUILayout.PropertyField(rule.FindPropertyRelative("priority"),
+            new GUIContent("Priority",
+                "Tie-breaker within the same tier; higher plays first."));
 
         GUILayout.Space(8);
 
@@ -564,6 +577,9 @@ public class DialogueRouteSetEditorWindow : EditorWindow
         el.FindPropertyRelative("requiredQuestStepIndex").intValue = -1;
         el.FindPropertyRelative("pickMode").intValue         = (int)DialoguePickMode.Random;
         el.FindPropertyRelative("requiredQuestState").intValue = (int)QuestRouteState.Any;
+        // New array elements copy the previous rule's values — reset priority explicitly.
+        el.FindPropertyRelative("tier").intValue             = (int)DialogueRuleTier.Auto;
+        el.FindPropertyRelative("priority").intValue         = 0;
 
         _so.ApplyModifiedProperties();
         _expandedRules.Add(idx);
@@ -665,6 +681,12 @@ public class DialogueRouteSetEditorWindow : EditorWindow
             var pool = rule.FindPropertyRelative("pool");
             parts.Add($"→ pool ({pool.arraySize} graphs)");
         }
+
+        // Priority tier
+        var tier = (DialogueRuleTier)rule.FindPropertyRelative("tier").intValue;
+        if (tier != DialogueRuleTier.Auto) parts.Add($"[{tier}]");
+        int prio = rule.FindPropertyRelative("priority").intValue;
+        if (prio != 0) parts.Add($"prio {prio}");
 
         // One-time
         if (rule.FindPropertyRelative("requireNotSeenDialogue").boolValue)

@@ -3,23 +3,51 @@ using UnityEngine;
 
 public static class DialogueSelector
 {
+    private struct Candidate
+    {
+        public DialogueSelectorRule Rule;
+        public DialogueRuleTier Tier;
+        public int Index;
+    }
+
     public static DialogueGraph Select(DialogueRouteSet routes, DialogueSelectorContext ctx)
     {
         if (routes == null)
             return null;
 
-        if (routes.rules != null)
+        if (routes.rules != null && routes.rules.Count > 0)
         {
+            // Eligibility first, then order by tier (Quest > Event > Routine >
+            // SmallTalk), priority within a tier, and finally authored list
+            // order — so an NPC's quest dialogue wins over their routine talk
+            // and small talk no matter where it sits in the list.
+            var candidates = new List<Candidate>(routes.rules.Count);
+
             for (int i = 0; i < routes.rules.Count; i++)
             {
                 var rule = routes.rules[i];
-                if (rule == null)
+                if (rule == null || !rule.IsEligible(ctx))
                     continue;
 
-                if (!rule.IsEligible(ctx))
-                    continue;
+                candidates.Add(new Candidate { Rule = rule, Tier = rule.GetEffectiveTier(), Index = i });
+            }
 
-                var result = ResolveRule(rule, ctx);
+            candidates.Sort(static (a, b) =>
+            {
+                int byTier = a.Tier.CompareTo(b.Tier);
+                if (byTier != 0) return byTier;
+
+                int byPriority = b.Rule.priority.CompareTo(a.Rule.priority);
+                if (byPriority != 0) return byPriority;
+
+                return a.Index.CompareTo(b.Index);
+            });
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                // A rule can still come up empty (e.g. an exhausted one-time pool);
+                // fall through to the next candidate like the old top-to-bottom pass.
+                var result = ResolveRule(candidates[i].Rule, ctx);
                 if (result != null)
                     return result;
             }

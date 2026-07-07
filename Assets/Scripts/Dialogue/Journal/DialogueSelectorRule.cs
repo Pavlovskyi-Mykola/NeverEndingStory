@@ -22,12 +22,33 @@ public enum QuestRouteState
     Completed = 3
 }
 
+/// <summary>
+/// Ordering tier for eligible rules: lower value plays first.
+/// Auto (the default for all pre-existing rules) resolves to Quest when the
+/// rule is gated on an Active quest, otherwise Routine.
+/// </summary>
+public enum DialogueRuleTier
+{
+    Auto = 0,
+    Quest = 1,     // quest-critical dialogue — always outranks chatter
+    Event = 2,     // calendar-event / special-day dialogue
+    Routine = 3,   // daily routine talk
+    SmallTalk = 4  // filler chatter, lowest priority
+}
+
 [Serializable]
 public class DialogueSelectorRule
 {
     [Header("Output")]
     [Tooltip("SingleGraph: return one graph when conditions pass. Pool: pick from the pool[] array.")]
     public DialogueRuleOutput output = DialogueRuleOutput.SingleGraph;
+
+    [Header("Priority")]
+    [Tooltip("Eligible rules play in tier order: Quest > Event > Routine > SmallTalk. Auto = Quest when this rule is gated on an Active quest (or a quest step), otherwise Routine. Ties resolve by Priority, then list order.")]
+    public DialogueRuleTier tier = DialogueRuleTier.Auto;
+
+    [Tooltip("Tie-breaker within the same tier: higher plays first. Equal priorities keep list order.")]
+    public int priority = 0;
 
     [Header("Graph / Pool")]
     public DialogueGraph graph;
@@ -71,6 +92,26 @@ public class DialogueSelectorRule
 
     [Header("Optional graph-level conditions")]
     public DialogueConditionGroup extraConditions;
+
+    /// <summary>
+    /// Tier used for ordering. Auto infers Quest only for rules gated on an
+    /// Active quest (or a specific step) — NotStarted offers and Completed
+    /// epilogues stay Routine unless explicitly tagged, since those gates can
+    /// hold true forever and would permanently mask other dialogue.
+    /// </summary>
+    public DialogueRuleTier GetEffectiveTier()
+    {
+        if (tier != DialogueRuleTier.Auto)
+            return tier;
+
+        bool activeQuestGated =
+            !string.IsNullOrWhiteSpace(requiredQuestId) &&
+            (requiredQuestState == QuestRouteState.Active ||
+             !string.IsNullOrWhiteSpace(requiredQuestStepId) ||
+             requiredQuestStepIndex >= 0);
+
+        return activeQuestGated ? DialogueRuleTier.Quest : DialogueRuleTier.Routine;
+    }
 
     public bool IsEligible(DialogueSelectorContext ctx)
     {

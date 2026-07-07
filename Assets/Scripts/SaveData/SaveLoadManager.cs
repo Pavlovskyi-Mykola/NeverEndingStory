@@ -397,6 +397,14 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (RelationshipManager.Instance != null)
             RelationshipManager.Instance.RestoreSnapshot(new RelationshipManager.Snapshot());
 
+        // Before the time reset below: its System TimeChanged re-anchors the
+        // calendar/random-event clocks to the fresh phase 0.
+        if (CalendarManager.Instance != null)
+            CalendarManager.Instance.RestoreSnapshot(new CalendarManager.Snapshot());
+
+        if (RandomEventManager.Instance != null)
+            RandomEventManager.Instance.RestoreSnapshot(new RandomEventManager.Snapshot());
+
         if (TimeManager.Instance != null)
             TimeManager.Instance.RestoreState(new TimeSave
             {
@@ -529,7 +537,15 @@ public sealed class SaveLoadManager : MonoBehaviour
 
             relationships = RelationshipManager.Instance != null
                 ? RelationshipManager.Instance.CaptureSnapshot()
-                : new RelationshipManager.Snapshot()
+                : new RelationshipManager.Snapshot(),
+
+            calendar = CalendarManager.Instance != null
+                ? CalendarManager.Instance.CaptureSnapshot()
+                : new CalendarManager.Snapshot(),
+
+            randomEvents = RandomEventManager.Instance != null
+                ? RandomEventManager.Instance.CaptureSnapshot()
+                : new RandomEventManager.Snapshot()
         };
     }
 
@@ -567,6 +583,14 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (RelationshipManager.Instance != null)
             RelationshipManager.Instance.RestoreSnapshot(data.relationships);
 
+        // After TimeManager.RestoreState: the calendar and random events anchor
+        // their clocks to the restored TotalPhasesElapsed.
+        if (CalendarManager.Instance != null)
+            CalendarManager.Instance.RestoreSnapshot(data.calendar);
+
+        if (RandomEventManager.Instance != null)
+            RandomEventManager.Instance.RestoreSnapshot(data.randomEvents);
+
         if (GameManager.Instance != null && !string.IsNullOrWhiteSpace(data.currentLocationSceneName))
             await GameManager.Instance.RestoreLocationBySceneName(data.currentLocationSceneName);
     }
@@ -581,6 +605,13 @@ public sealed class SaveLoadManager : MonoBehaviour
 
         if (data.career == null)
             data.career = new CareerManager.Snapshot();
+
+        // v8: pre-calendar saves have no event history — start empty.
+        if (data.calendar == null)
+            data.calendar = new CalendarManager.Snapshot();
+
+        if (data.randomEvents == null)
+            data.randomEvents = new RandomEventManager.Snapshot();
 
         if (data.version < SaveVersions.TrackedQuestAndSlots)
         {
