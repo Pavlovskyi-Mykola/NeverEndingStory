@@ -9,7 +9,8 @@ public enum NotificationType
     StatChange,
     ItemChange,
     Promotion,
-    Blocked
+    Blocked,
+    Relationship
 }
 
 public readonly struct NotificationRequest

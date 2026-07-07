@@ -395,6 +395,13 @@ public class DialogueRouteSetEditorWindow : EditorWindow
 
         GUILayout.Space(8);
 
+        // Relationship gate
+        SectionLabel("Relationship Gate  (0 = not checked)");
+        EditorGUILayout.PropertyField(rule.FindPropertyRelative("requiredRelationshipLevel"),
+            new GUIContent("Required Level", "Minimum relationship level with this route set's NPC."));
+
+        GUILayout.Space(8);
+
         // Stats gate
         SectionLabel("Stat Minimums  (0 = not checked)");
         EditorGUILayout.PropertyField(rule.FindPropertyRelative("requiredMoney"));

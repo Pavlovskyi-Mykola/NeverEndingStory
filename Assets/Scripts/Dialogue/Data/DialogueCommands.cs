@@ -14,7 +14,8 @@ public enum DialogueCommandType
     AddItem,
     RemoveItem,
     ConsumeItem,
-    StartQuest
+    StartQuest,
+    AddRelationship
 }
 
 [Serializable]
@@ -30,6 +31,9 @@ public class DialogueCommand
     [ItemId] public string itemId;
 
     public string questId;
+
+    [Tooltip("AddRelationship: leave empty to target the NPC you're currently talking to.")]
+    public string targetNpcId;
 
     public void Execute()
     {
@@ -94,6 +98,17 @@ public class DialogueCommand
                 if (QuestManager.Instance != null && !string.IsNullOrWhiteSpace(questId))
                     QuestManager.Instance.StartQuest(questId);
                 break;
+
+            case DialogueCommandType.AddRelationship:
+                {
+                    string npcId = !string.IsNullOrWhiteSpace(targetNpcId)
+                        ? targetNpcId
+                        : DialogueRunner.Instance != null ? DialogueRunner.Instance.CurrentNpcId : null;
+
+                    if (RelationshipManager.Instance != null && !string.IsNullOrEmpty(npcId))
+                        RelationshipManager.Instance.AddPoints(npcId, amount); // amount may be negative
+                    break;
+                }
         }
     }
 }

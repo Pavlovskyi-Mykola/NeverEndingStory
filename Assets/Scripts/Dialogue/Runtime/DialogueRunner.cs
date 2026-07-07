@@ -57,6 +57,10 @@ public class DialogueRunner : MonoBehaviour
 
     public bool IsRunning => _graph != null && _current != null;
 
+    /// <summary>NpcId of the current conversation partner, or null outside dialogue.
+    /// Lets commands/conditions target "the person I'm talking to" implicitly.</summary>
+    public string CurrentNpcId => _hasContext && IsRunning ? _context.NpcId : null;
+
     /// <summary>True while runner is traversing nodes; UI input should be ignored while true.</summary>
     public bool IsAdvancing { get; private set; }
 

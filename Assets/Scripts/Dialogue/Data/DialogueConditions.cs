@@ -10,7 +10,8 @@ public enum DialogueConditionType
     NetworkingAtLeast,
     ReputationAtLeast,
     TimeOfDayIs,
-    FlagIsTrue
+    FlagIsTrue,
+    RelationshipAtLeast
 }
 
 [Serializable]
@@ -21,6 +22,9 @@ public class DialogueCondition
     public int intValue;
     public TimeOfDay timeOfDayValue;
     [FlagId] public string flagId;
+
+    [Tooltip("RelationshipAtLeast: leave empty to check the NPC you're currently talking to.")]
+    public string npcId;
 }
 
 [Serializable]
@@ -66,6 +70,17 @@ public class DialogueConditionGroup
             case DialogueConditionType.FlagIsTrue:
                 // An unset flag id fails the condition rather than silently passing.
                 return !string.IsNullOrWhiteSpace(c.flagId) && WorldFlags.Get(c.flagId);
+
+            case DialogueConditionType.RelationshipAtLeast:
+                {
+                    string npcId = !string.IsNullOrWhiteSpace(c.npcId)
+                        ? c.npcId
+                        : DialogueRunner.Instance != null ? DialogueRunner.Instance.CurrentNpcId : null;
+
+                    return RelationshipManager.Instance != null &&
+                           !string.IsNullOrEmpty(npcId) &&
+                           RelationshipManager.Instance.GetLevel(npcId) >= c.intValue;
+                }
 
             default:
                 return true;

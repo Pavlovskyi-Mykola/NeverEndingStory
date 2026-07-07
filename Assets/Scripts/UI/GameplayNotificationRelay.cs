@@ -17,6 +17,7 @@ public sealed class GameplayNotificationRelay : MonoBehaviour
     [SerializeField] private bool notifyItemChanges = true;
     [SerializeField] private bool notifyPromotions = true;
     [SerializeField] private bool notifyTravelBlocked = true;
+    [SerializeField] private bool notifyRelationships = true;
 
     // Stats: diff snapshots once per frame (GameEvents.StatsChanged carries no delta).
     private GameEvents.StatsSnapshot _baseline;
@@ -39,6 +40,10 @@ public sealed class GameplayNotificationRelay : MonoBehaviour
         GameManager.InstanceReady += HandleGameManagerReady;
         if (GameManager.Instance != null)
             HandleGameManagerReady(GameManager.Instance);
+
+        RelationshipManager.InstanceReady += HandleRelationshipsReady;
+        if (RelationshipManager.Instance != null)
+            HandleRelationshipsReady(RelationshipManager.Instance);
     }
 
     private void OnDisable()
@@ -53,6 +58,16 @@ public sealed class GameplayNotificationRelay : MonoBehaviour
         GameManager.InstanceReady -= HandleGameManagerReady;
         if (GameManager.Instance != null)
             GameManager.Instance.TravelBlocked -= HandleTravelBlocked;
+
+        RelationshipManager.InstanceReady -= HandleRelationshipsReady;
+        if (RelationshipManager.Instance != null)
+            RelationshipManager.Instance.OnLevelChanged -= HandleRelationshipLevelChanged;
+    }
+
+    private void HandleRelationshipsReady(RelationshipManager relationships)
+    {
+        relationships.OnLevelChanged -= HandleRelationshipLevelChanged;
+        relationships.OnLevelChanged += HandleRelationshipLevelChanged;
     }
 
     private void HandleCareerReady(CareerManager career)
@@ -195,9 +210,38 @@ public sealed class GameplayNotificationRelay : MonoBehaviour
         Notifications.Post(GetLocationName(target), message, NotificationType.Blocked);
     }
 
+    private void HandleRelationshipLevelChanged(string npcId, int oldLevel, int newLevel)
+    {
+        if (!notifyRelationships)
+            return;
+
+        string name = GetNpcName(npcId);
+        string message = newLevel > oldLevel
+            ? $"{name} trusts you more."
+            : $"{name} trusts you less.";
+
+        Notifications.Post(name, message, NotificationType.Relationship);
+    }
+
     // -----------------------
     // Display-name helpers
     // -----------------------
+
+    private static string GetNpcName(string npcId)
+    {
+        var nm = NpcManager.Instance;
+        if (nm != null && nm.Npcs != null)
+        {
+            for (int i = 0; i < nm.Npcs.Count; i++)
+            {
+                var def = nm.Npcs[i];
+                if (def != null && string.Equals(def.NpcId, npcId, System.StringComparison.Ordinal))
+                    return string.IsNullOrWhiteSpace(def.DisplayName) ? npcId : def.DisplayName;
+            }
+        }
+
+        return npcId;
+    }
 
     private static string GetItemName(string itemId)
     {

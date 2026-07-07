@@ -715,6 +715,7 @@ public class DialogueGraphEditorWindow : EditorWindow
             DialogueConditionType.TimeOfDayIs        =>
                 $"Time = {(TimeOfDay)(c.FindPropertyRelative("timeOfDayValue")?.intValue ?? 0)}",
             DialogueConditionType.FlagIsTrue         => $"Flag '{c.FindPropertyRelative("flagId")?.stringValue ?? "?"}' is true",
+            DialogueConditionType.RelationshipAtLeast => $"Relationship ≥ {intVal}",
             _                                        => type.ToString()
         };
     }

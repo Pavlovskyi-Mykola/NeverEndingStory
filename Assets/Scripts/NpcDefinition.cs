@@ -17,6 +17,11 @@ public class NpcDefinition : ScriptableObject
     [Header("Schedule")]
     public List<NpcScheduleEntry> Schedule = new List<NpcScheduleEntry>();
 
+    [Header("Relationship (0 = use RelationshipManager defaults)")]
+    [Tooltip("Points needed per level for this NPC — higher = harder to win over.")]
+    public int RelationshipPointsPerLevel = 0;
+    public int RelationshipMaxLevel = 0;
+
     public bool TryGetScheduleForLocation(DayOfWeek day, TimeOfDay phase, SceneReference location, out NpcScheduleEntry entry)
     {
         entry = default;

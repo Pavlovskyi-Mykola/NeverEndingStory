@@ -394,6 +394,9 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (CareerManager.Instance != null)
             CareerManager.Instance.RestoreSnapshot(new CareerManager.Snapshot());
 
+        if (RelationshipManager.Instance != null)
+            RelationshipManager.Instance.RestoreSnapshot(new RelationshipManager.Snapshot());
+
         if (TimeManager.Instance != null)
             TimeManager.Instance.RestoreState(new TimeSave
             {
@@ -522,7 +525,11 @@ public sealed class SaveLoadManager : MonoBehaviour
 
             career = CareerManager.Instance != null
                 ? CareerManager.Instance.CaptureSnapshot()
-                : new CareerManager.Snapshot()
+                : new CareerManager.Snapshot(),
+
+            relationships = RelationshipManager.Instance != null
+                ? RelationshipManager.Instance.CaptureSnapshot()
+                : new RelationshipManager.Snapshot()
         };
     }
 
@@ -556,6 +563,9 @@ public sealed class SaveLoadManager : MonoBehaviour
 
         if (CareerManager.Instance != null)
             CareerManager.Instance.RestoreSnapshot(data.career);
+
+        if (RelationshipManager.Instance != null)
+            RelationshipManager.Instance.RestoreSnapshot(data.relationships);
 
         if (GameManager.Instance != null && !string.IsNullOrWhiteSpace(data.currentLocationSceneName))
             await GameManager.Instance.RestoreLocationBySceneName(data.currentLocationSceneName);

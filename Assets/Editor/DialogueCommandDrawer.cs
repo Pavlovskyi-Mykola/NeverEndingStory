@@ -24,6 +24,7 @@ public class DialogueCommandDrawer : PropertyDrawer
             case "AddItem":
             case "RemoveItem":
             case "ConsumeItem":
+            case "AddRelationship":
                 return (Line + VSpace) * 3f;
 
             case "StartQuest":
@@ -99,6 +100,17 @@ public class DialogueCommandDrawer : PropertyDrawer
                     DrawQuestPopup(row, questIdProp);
                 else
                     EditorGUI.LabelField(row, "questId field is missing");
+                break;
+
+            case "AddRelationship":
+                if (amountProp != null)
+                    EditorGUI.PropertyField(row, amountProp, new GUIContent("Points", "Negative = penalty"));
+
+                row.y += Line + VSpace;
+
+                var targetNpcProp = property.FindPropertyRelative("targetNpcId");
+                if (targetNpcProp != null)
+                    EditorGUI.PropertyField(row, targetNpcProp, new GUIContent("Npc Id", "Empty = current speaker"));
                 break;
 
             default:

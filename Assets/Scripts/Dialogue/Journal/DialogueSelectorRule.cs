@@ -58,6 +58,10 @@ public class DialogueSelectorRule
     [FlagId] public string requiredFlagId;
     public bool requiredFlagValue = true;
 
+    [Header("Relationship (optional)")]
+    [Tooltip("Minimum relationship level with THIS route set's NPC. 0 = ignored.")]
+    public int requiredRelationshipLevel = 0;
+
     [Header("Stats (optional)")]
     public int requiredMoney = 0;
     public int requiredInfluence = 0;
@@ -88,6 +92,9 @@ public class DialogueSelectorRule
             return false;
 
         if (!PassesFlagChecks(ctx))
+            return false;
+
+        if (!PassesRelationship(ctx))
             return false;
 
         if (!PassesStatsChecks(ctx))
@@ -193,6 +200,16 @@ public class DialogueSelectorRule
             return true;
 
         return ctx.CheckFlag(requiredFlagId, requiredFlagValue);
+    }
+
+    private bool PassesRelationship(DialogueSelectorContext ctx)
+    {
+        if (requiredRelationshipLevel <= 0)
+            return true;
+
+        return RelationshipManager.Instance != null &&
+               !string.IsNullOrEmpty(ctx.NpcId) &&
+               RelationshipManager.Instance.GetLevel(ctx.NpcId) >= requiredRelationshipLevel;
     }
 
     private bool PassesStatsChecks(DialogueSelectorContext ctx)

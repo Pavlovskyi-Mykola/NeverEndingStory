@@ -19,6 +19,7 @@ public sealed class SaveData
     public QuestJournal.Snapshot quests = new();
     public DialogueJournal.Snapshot dialogues = new();
     public CareerManager.Snapshot career = new CareerManager.Snapshot();
+    public RelationshipManager.Snapshot relationships = new();
 }
 
 public static class SaveVersions
@@ -29,8 +30,9 @@ public static class SaveVersions
     public const int CorporateStats = 4;
     public const int QuestStartAndRepeat = 5;
     public const int EnergyStat = 6;
+    public const int Relationships = 7;
 
-    public const int Current = EnergyStat;
+    public const int Current = Relationships;
 }
 
 [Serializable]
