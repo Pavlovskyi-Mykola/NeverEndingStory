@@ -58,52 +58,52 @@ public static partial class WorldFlags
         }
     }
 
-    public static class Relationship
+    public static class Rel
     {
         public static class Bob
         {
-            public const string Lvl1 = "relationship.Bob.lvl1";
+            public const string Lvl1 = "rel.Bob.lvl1";
 
-            public const string Lvl10 = "relationship.Bob.lvl10";
+            public const string Lvl10 = "rel.Bob.lvl10";
 
-            public const string Lvl2 = "relationship.Bob.lvl2";
+            public const string Lvl2 = "rel.Bob.lvl2";
 
-            public const string Lvl3 = "relationship.Bob.lvl3";
+            public const string Lvl3 = "rel.Bob.lvl3";
 
-            public const string Lvl4 = "relationship.Bob.lvl4";
+            public const string Lvl4 = "rel.Bob.lvl4";
 
-            public const string Lvl5 = "relationship.Bob.lvl5";
+            public const string Lvl5 = "rel.Bob.lvl5";
 
-            public const string Lvl6 = "relationship.Bob.lvl6";
+            public const string Lvl6 = "rel.Bob.lvl6";
 
-            public const string Lvl7 = "relationship.Bob.lvl7";
+            public const string Lvl7 = "rel.Bob.lvl7";
 
-            public const string Lvl8 = "relationship.Bob.lvl8";
+            public const string Lvl8 = "rel.Bob.lvl8";
 
-            public const string Lvl9 = "relationship.Bob.lvl9";
+            public const string Lvl9 = "rel.Bob.lvl9";
         }
 
         public static class Cat
         {
-            public const string Lvl1 = "relationship.Cat.lvl1";
+            public const string Lvl1 = "rel.Cat.lvl1";
 
-            public const string Lvl10 = "relationship.Cat.lvl10";
+            public const string Lvl10 = "rel.Cat.lvl10";
 
-            public const string Lvl2 = "relationship.Cat.lvl2";
+            public const string Lvl2 = "rel.Cat.lvl2";
 
-            public const string Lvl3 = "relationship.Cat.lvl3";
+            public const string Lvl3 = "rel.Cat.lvl3";
 
-            public const string Lvl4 = "relationship.Cat.lvl4";
+            public const string Lvl4 = "rel.Cat.lvl4";
 
-            public const string Lvl5 = "relationship.Cat.lvl5";
+            public const string Lvl5 = "rel.Cat.lvl5";
 
-            public const string Lvl6 = "relationship.Cat.lvl6";
+            public const string Lvl6 = "rel.Cat.lvl6";
 
-            public const string Lvl7 = "relationship.Cat.lvl7";
+            public const string Lvl7 = "rel.Cat.lvl7";
 
-            public const string Lvl8 = "relationship.Cat.lvl8";
+            public const string Lvl8 = "rel.Cat.lvl8";
 
-            public const string Lvl9 = "relationship.Cat.lvl9";
+            public const string Lvl9 = "rel.Cat.lvl9";
         }
     }
 
