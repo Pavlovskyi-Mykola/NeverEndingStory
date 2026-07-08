@@ -376,8 +376,10 @@ public sealed class SaveLoadManager : MonoBehaviour
         if (DialogueRunner.Instance != null)
             DialogueRunner.Instance.AbortDialogue();
 
+        // Fresh-game stats come from the manager's inspector defaults, not a
+        // zeroed save object (new PlayerStatsSave() would wipe starting stats).
         if (PlayerStatsManager.Instance != null)
-            PlayerStatsManager.Instance.RestoreState(new PlayerStatsSave());
+            PlayerStatsManager.Instance.ResetToFreshState();
 
         if (InventoryManager.Instance != null)
             InventoryManager.Instance.RestoreState(new InventorySave());

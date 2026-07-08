@@ -22,6 +22,11 @@ public class PlayerStatsManager : MonoBehaviour
     private int maxEnergy;
     private int energy;
 
+    // The inspector values above are the fresh-game design defaults, but runtime
+    // mutates those same fields — snapshot them once at startup so New Game can
+    // reset to what the designer configured instead of zeros.
+    private PlayerStatsSave _freshDefaults;
+
     public int Money => money;
     public int Influence => influence;
     public int Strategy => strategy;
@@ -47,6 +52,8 @@ public class PlayerStatsManager : MonoBehaviour
         maxEnergy = Mathf.Max(1, defaultMaxEnergy);
         energy = maxEnergy;
 
+        _freshDefaults = CaptureState();
+
         InstanceReady?.Invoke(this);
         RaiseChanged();
         RaiseEnergyChanged();
@@ -66,6 +73,12 @@ public class PlayerStatsManager : MonoBehaviour
         };
     }
 
+    /// <summary>Fresh-game reset to the inspector-configured starting stats (not zeros).</summary>
+    public void ResetToFreshState()
+    {
+        RestoreState(_freshDefaults);
+    }
+
     public void RestoreState(PlayerStatsSave data)
     {
         if (data == null) return;
@@ -76,8 +89,7 @@ public class PlayerStatsManager : MonoBehaviour
         networking = Mathf.Max(0, data.networking);
         reputation = Mathf.Max(0, data.reputation);
 
-        // -1 sentinels: fresh game (new PlayerStatsSave) and pre-energy saves both
-        // fall back to the design default at full charge.
+        // -1 sentinels: pre-energy saves fall back to the design default at full charge.
         maxEnergy = data.maxEnergy > 0 ? data.maxEnergy : Mathf.Max(1, defaultMaxEnergy);
         energy = data.energy >= 0 ? Mathf.Min(data.energy, maxEnergy) : maxEnergy;
 

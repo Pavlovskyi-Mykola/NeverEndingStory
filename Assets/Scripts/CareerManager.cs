@@ -107,7 +107,21 @@ public sealed class CareerManager : MonoBehaviour
             : null;
 
         _unlockedFloors.Clear();
+        AddBaselineFloors();
 
+        if (raiseEvents)
+            RaiseChanged();
+    }
+
+    /// <summary>
+    /// Unions the always-available floors into the unlocked set: the configured
+    /// starting floors and the current floor. Called on fresh state AND after
+    /// restoring a save, so a save written under an older floor config can never
+    /// lock the player out of baseline locations — saves only add promotion-earned
+    /// floors on top.
+    /// </summary>
+    private void AddBaselineFloors()
+    {
         if (startingUnlockedFloorScenes != null)
         {
             for (int i = 0; i < startingUnlockedFloorScenes.Count; i++)
@@ -118,11 +132,11 @@ public sealed class CareerManager : MonoBehaviour
             }
         }
 
+        if (startingCurrentFloorScene != null && startingCurrentFloorScene.IsValid)
+            _unlockedFloors.Add(startingCurrentFloorScene.SceneName);
+
         if (!string.IsNullOrWhiteSpace(_currentFloorSceneName))
             _unlockedFloors.Add(_currentFloorSceneName);
-
-        if (raiseEvents)
-            RaiseChanged();
     }
 
     private void RaiseChanged()
@@ -186,8 +200,7 @@ public sealed class CareerManager : MonoBehaviour
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(_currentFloorSceneName))
-            _unlockedFloors.Add(_currentFloorSceneName);
+        AddBaselineFloors();
 
         RaiseChanged();
     }
