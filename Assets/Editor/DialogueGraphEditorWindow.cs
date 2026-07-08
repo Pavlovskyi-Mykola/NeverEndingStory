@@ -95,6 +95,13 @@ public class DialogueGraphEditorWindow : EditorWindow
         };
     }
 
+    // -------------------- All-graphs list --------------------
+    private const float GraphListWidth = 230f;
+    [SerializeField] private bool showGraphList = true;
+    private readonly List<DialogueGraph> _allGraphs = new();
+    private string _graphSearch = "";
+    private Vector2 _graphListScroll;
+
     // ---------------------------------------------------------------
     [MenuItem("Game/Dialogue/Dialogue Editor")]
     public static void Open()
@@ -104,9 +111,38 @@ public class DialogueGraphEditorWindow : EditorWindow
         w.Show();
     }
 
+    /// <summary>Opens the window focused on a specific graph (used by the asset inspector button).</summary>
+    public static void OpenGraph(DialogueGraph graph)
+    {
+        var w = GetWindow<DialogueGraphEditorWindow>();
+        w.titleContent = new GUIContent("Dialogue Editor");
+        w.SetGraph(graph);
+        w.Show();
+        w.Focus();
+    }
+
     private void OnEnable()
     {
         wantsMouseMove = true;
+        RefreshGraphList();
+    }
+
+    private void OnFocus()
+    {
+        RefreshGraphList();
+    }
+
+    private void RefreshGraphList()
+    {
+        _allGraphs.Clear();
+
+        foreach (var guid in AssetDatabase.FindAssets("t:DialogueGraph"))
+        {
+            var g = AssetDatabase.LoadAssetAtPath<DialogueGraph>(AssetDatabase.GUIDToAssetPath(guid));
+            if (g != null) _allGraphs.Add(g);
+        }
+
+        _allGraphs.Sort((a, b) => string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OnGUI()
@@ -124,6 +160,8 @@ public class DialogueGraphEditorWindow : EditorWindow
         }
 
         EditorGUILayout.BeginHorizontal();
+        if (showGraphList)
+            DrawGraphListPanel();
         DrawLeftPanel();
         DrawCanvas();
         EditorGUILayout.EndHorizontal();
@@ -132,10 +170,70 @@ public class DialogueGraphEditorWindow : EditorWindow
             Repaint();
     }
 
+    // ── All-dialogues list (same pattern as the Quest Editor) ────────────
+    private void DrawGraphListPanel()
+    {
+        using (new EditorGUILayout.VerticalScope(GUILayout.Width(GraphListWidth), GUILayout.ExpandHeight(true)))
+        {
+            EditorGUILayout.LabelField($"All Dialogues ({_allGraphs.Count})", EditorStyles.boldLabel);
+
+            EditorGUI.BeginChangeCheck();
+            _graphSearch = EditorGUILayout.TextField(_graphSearch, EditorStyles.toolbarSearchField);
+            if (EditorGUI.EndChangeCheck()) Repaint();
+
+            EditorGUILayout.Space(2);
+            _graphListScroll = EditorGUILayout.BeginScrollView(_graphListScroll, GUILayout.ExpandHeight(true));
+
+            string search = string.IsNullOrEmpty(_graphSearch) ? null : _graphSearch.ToLowerInvariant();
+
+            foreach (var g in _allGraphs)
+            {
+                if (g == null) continue;
+
+                if (search != null && !g.name.ToLowerInvariant().Contains(search))
+                    continue;
+
+                bool isSelected = g == _graph;
+                var rowRect = GUILayoutUtility.GetRect(GraphListWidth - 8, 36f);
+
+                if (isSelected)
+                    EditorGUI.DrawRect(rowRect, new Color(0.24f, 0.50f, 0.86f, 0.35f));
+                else if (rowRect.Contains(Event.current.mousePosition))
+                    EditorGUI.DrawRect(rowRect, new Color(1f, 1f, 1f, 0.05f));
+
+                // Colour strip: red when no start node is set.
+                bool hasStart = !string.IsNullOrEmpty(g.StartNodeId);
+                EditorGUI.DrawRect(new Rect(rowRect.x, rowRect.y, 3, rowRect.height),
+                    hasStart ? new Color(0.3f, 0.7f, 0.3f) : Color.red);
+
+                int nodeCount = g.Nodes != null ? g.Nodes.Count : 0;
+                string sub = hasStart ? $"{nodeCount} nodes" : $"{nodeCount} nodes · ⚠ no start";
+                if (g.CountsAsRelationshipTalk) sub += " · rel";
+
+                GUI.Label(new Rect(rowRect.x + 8, rowRect.y + 4, rowRect.width - 10, 16), g.name, EditorStyles.boldLabel);
+                GUI.Label(new Rect(rowRect.x + 8, rowRect.y + 20, rowRect.width - 10, 12), sub, EditorStyles.miniLabel);
+
+                if (Event.current.type == EventType.MouseDown && rowRect.Contains(Event.current.mousePosition))
+                {
+                    SetGraph(g);
+                    Event.current.Use();
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        // Divider
+        var line = GUILayoutUtility.GetRect(1f, 1f, GUILayout.Width(1), GUILayout.ExpandHeight(true));
+        EditorGUI.DrawRect(line, new Color(0f, 0f, 0f, 0.4f));
+    }
+
     private void DrawTopToolbar()
     {
         using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
         {
+            showGraphList = GUILayout.Toggle(showGraphList, "Dialogues", EditorStyles.toolbarButton, GUILayout.Width(70));
+
             var newGraph = (DialogueGraph)EditorGUILayout.ObjectField(
                 _graph, typeof(DialogueGraph), false, GUILayout.Width(360));
 
