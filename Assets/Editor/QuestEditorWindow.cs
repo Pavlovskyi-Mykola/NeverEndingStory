@@ -41,6 +41,8 @@ public class QuestEditorWindow : EditorWindow
         { QuestStepType.PayMoney,       new Color(0.58f, 0.27f, 0.14f) },
         { QuestStepType.MinStats,       new Color(0.20f, 0.30f, 0.60f) },
         { QuestStepType.TimeWindow,     new Color(0.18f, 0.48f, 0.54f) },
+        { QuestStepType.FlagTrue,       new Color(0.30f, 0.34f, 0.40f) },
+        { QuestStepType.CompleteMiniGame, new Color(0.50f, 0.30f, 0.52f) },
     };
 
     // ── Day/Phase toggle data ─────────────────────────────────────────────
@@ -648,15 +650,17 @@ public class QuestEditorWindow : EditorWindow
         void Add(string label, QuestStepType t) =>
             menu.AddItem(new GUIContent(label), false, () => AddStep(t));
 
-        Add("Manual",           QuestStepType.Manual);
-        Add("Auto Complete",    QuestStepType.AutoComplete);
-        Add("Reach Location",   QuestStepType.ReachLocation);
-        Add("Talk To Dialogue", QuestStepType.TalkToDialogue);
-        Add("Have Item",        QuestStepType.HaveItem);
-        Add("Have Money",       QuestStepType.HaveMoney);
-        Add("Pay Money",        QuestStepType.PayMoney);
-        Add("Min Stats",        QuestStepType.MinStats);
-        Add("Time Window",      QuestStepType.TimeWindow);
+        Add("Manual",            QuestStepType.Manual);
+        Add("Auto Complete",     QuestStepType.AutoComplete);
+        Add("Reach Location",    QuestStepType.ReachLocation);
+        Add("Talk To Dialogue",  QuestStepType.TalkToDialogue);
+        Add("Have Item",         QuestStepType.HaveItem);
+        Add("Have Money",        QuestStepType.HaveMoney);
+        Add("Pay Money",         QuestStepType.PayMoney);
+        Add("Min Stats",         QuestStepType.MinStats);
+        Add("Time Window",       QuestStepType.TimeWindow);
+        Add("Flag True",         QuestStepType.FlagTrue);
+        Add("Complete Mini Game", QuestStepType.CompleteMiniGame);
         menu.ShowAsContext();
     }
 
@@ -1042,6 +1046,8 @@ public class QuestEditorWindow : EditorWindow
         QuestStepType.PayMoney       => "Pay Money",
         QuestStepType.MinStats       => "Min Stats",
         QuestStepType.TimeWindow     => "Time Window",
+        QuestStepType.FlagTrue       => "Flag True",
+        QuestStepType.CompleteMiniGame => "Complete Mini Game",
         _ => t.ToString()
     };
 
