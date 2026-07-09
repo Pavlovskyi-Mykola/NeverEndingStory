@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,10 +14,6 @@ public class DialogueUI : MonoBehaviour
     [SerializeField] private DialogueLineUI linePrefab;
     [SerializeField] private int maxLines = 200;
 
-    [Header("Controls")]
-    [SerializeField] private Button continueButton;
-    [SerializeField] private Text continueButtonLabel;
-
     [Header("Choices")]
     [SerializeField] private Transform choicesRoot;
     [SerializeField] private Button choiceButtonPrefab;
@@ -24,18 +21,8 @@ public class DialogueUI : MonoBehaviour
     [Header("Speaker Mapping")]
     [SerializeField] private string playerSpeakerName = NpcManager.PlayerSpeakerId;
 
-    [Header("Behavior")]
-    [SerializeField] private bool clearLogOnHide = false;
-    [SerializeField] private string closeButtonLabel = "Continue"; // change to "Close" if you prefer
-
     private readonly List<DialogueLineUI> _spawnedLines = new();
     private readonly List<Button> _spawnedChoiceButtons = new();
-
-    private DialogueTurnAction _currentAction;
-
-    private bool _hasPendingPlayerReply;
-    private string _pendingSpeaker;
-    private string _pendingText;
 
     private void Awake()
     {
@@ -49,9 +36,6 @@ public class DialogueUI : MonoBehaviour
         DialogueRunner.InstanceReady += HandleRunnerReady;
         if (DialogueRunner.Instance != null)
             HandleRunnerReady(DialogueRunner.Instance);
-
-        if (continueButton != null)
-            continueButton.onClick.AddListener(OnContinueClicked);
     }
 
     private void OnDisable()
@@ -62,9 +46,6 @@ public class DialogueUI : MonoBehaviour
             DialogueRunner.Instance.OnTurn -= HandleTurn;
             DialogueRunner.Instance.OnHideDialogue -= HandleHide;
         }
-
-        if (continueButton != null)
-            continueButton.onClick.RemoveListener(OnContinueClicked);
     }
 
     private void HandleRunnerReady(DialogueRunner runner)
@@ -80,9 +61,6 @@ public class DialogueUI : MonoBehaviour
         if (panelRoot != null) panelRoot.SetActive(true);
 
         ClearChoices();
-        _hasPendingPlayerReply = false;
-
-        _currentAction = turn.Action;
 
         // Append NPC line if provided
         if (turn.HasNpcLine)
@@ -91,52 +69,52 @@ public class DialogueUI : MonoBehaviour
         switch (turn.Action)
         {
             case DialogueTurnAction.Continue:
-                ShowContinue(true);
-                SetContinueLabel("Continue");
+                SpawnActionButton("Continue", () => DialogueRunner.Instance.Continue());
                 break;
 
             case DialogueTurnAction.PlayerReply:
-                _hasPendingPlayerReply = true;
-                _pendingSpeaker = string.IsNullOrWhiteSpace(turn.PlayerSpeaker) ? playerSpeakerName : turn.PlayerSpeaker;
-                _pendingText = turn.PlayerText;
-
-                ShowContinue(true);
-                SetContinueLabel(turn.PlayerText);
+            {
+                string speaker = string.IsNullOrWhiteSpace(turn.PlayerSpeaker) ? playerSpeakerName : turn.PlayerSpeaker;
+                string text = turn.PlayerText;
+                SpawnActionButton(text, () =>
+                {
+                    AppendLine(speaker, text, isPlayer: true);
+                    DialogueRunner.Instance.SubmitPlayerReply();
+                });
                 break;
+            }
 
             case DialogueTurnAction.Choices:
-                ShowContinue(false);
                 SpawnChoices(turn.Choices);
                 break;
 
             case DialogueTurnAction.Close:
-                ShowContinue(true);
-                SetContinueLabel(closeButtonLabel);
+                SpawnActionButton("Continue", () => DialogueRunner.Instance.CloseDialogue());
                 break;
         }
     }
 
-    private void OnContinueClicked()
+    // Continue / Close / forced player reply all present as a single button,
+    // spawned from the same prefab as choices.
+    private void SpawnActionButton(string label, System.Action onClick)
     {
-        if (DialogueRunner.Instance == null) return;
-        if (DialogueRunner.Instance.IsAdvancing) return;
-
-        if (_currentAction == DialogueTurnAction.Close)
+        if (choiceButtonPrefab == null || choicesRoot == null)
         {
-            DialogueRunner.Instance.CloseDialogue();
+            Debug.LogError("[DialogueUI] Choice button prefab / root are not set.", this);
             return;
         }
 
-        if (_hasPendingPlayerReply)
+        var btn = Instantiate(choiceButtonPrefab, choicesRoot);
+        _spawnedChoiceButtons.Add(btn);
+
+        SetButtonLabel(btn, label);
+
+        btn.onClick.AddListener(() =>
         {
-            AppendLine(_pendingSpeaker, _pendingText, isPlayer: true);
-            _hasPendingPlayerReply = false;
-
-            DialogueRunner.Instance.SubmitPlayerReply();
-            return;
-        }
-
-        DialogueRunner.Instance.Continue();
+            if (DialogueRunner.Instance == null) return;
+            if (DialogueRunner.Instance.IsAdvancing) return;
+            onClick();
+        });
     }
 
     private void SpawnChoices(List<PresentedChoice> choices)
@@ -150,8 +128,8 @@ public class DialogueUI : MonoBehaviour
             var btn = Instantiate(choiceButtonPrefab, choicesRoot);
             _spawnedChoiceButtons.Add(btn);
 
-            var txt = btn.GetComponentInChildren<Text>();
-            if (txt != null) txt.text = choices[index].Text;
+            // Prefix each choice with its option number: "1. ", "2. ", ...
+            SetButtonLabel(btn, $"{index + 1}. {choices[index].Text}");
 
             btn.onClick.AddListener(() =>
             {
@@ -166,34 +144,19 @@ public class DialogueUI : MonoBehaviour
         }
     }
 
+    private static void SetButtonLabel(Button btn, string label)
+    {
+        var txt = btn.GetComponentInChildren<TMP_Text>();
+        if (txt != null) txt.text = label;
+    }
+
     private void HandleHide()
     {
         ClearChoices();
-        _hasPendingPlayerReply = false;
-
-        if (clearLogOnHide)
-            ClearConversationLog();
+        ClearConversationLog();
 
         if (panelRoot != null)
             panelRoot.SetActive(false);
-    }
-
-    private void SetContinueLabel(string label)
-    {
-        if (continueButtonLabel != null)
-            continueButtonLabel.text = label;
-    }
-
-    private void ShowContinue(bool show)
-    {
-        if (continueButton != null)
-            continueButton.gameObject.SetActive(show);
-    }
-
-    private bool IsPlayerSpeaker(string speaker)
-    {
-        if (string.IsNullOrWhiteSpace(speaker)) return false;
-        return string.Equals(speaker.Trim(), playerSpeakerName.Trim(), System.StringComparison.OrdinalIgnoreCase);
     }
 
     private void AppendLine(string speaker, string text, bool isPlayer)
@@ -204,8 +167,13 @@ public class DialogueUI : MonoBehaviour
             return;
         }
 
+        Color npcTextColor = Color.white;
+        Color npcNameColor = Color.white;
+        if (!isPlayer)
+            ResolveNpcColors(out npcTextColor, out npcNameColor);
+
         var line = Instantiate(linePrefab, conversationContent);
-        line.Setup(speaker, text, isPlayer);
+        line.Setup(speaker, text, isPlayer, npcTextColor, npcNameColor);
         _spawnedLines.Add(line);
 
         if (maxLines > 0 && _spawnedLines.Count > maxLines)
@@ -219,6 +187,24 @@ public class DialogueUI : MonoBehaviour
 
         Canvas.ForceUpdateCanvases();
         conversationScroll.verticalNormalizedPosition = 0f;
+    }
+
+    // NPC dialogue colors live on the speaker's NpcDefinition — resolve them for
+    // the current conversation partner. Falls back to white if unavailable.
+    private void ResolveNpcColors(out Color textColor, out Color nameColor)
+    {
+        textColor = Color.white;
+        nameColor = Color.white;
+
+        if (NpcManager.Instance == null || DialogueRunner.Instance == null)
+            return;
+
+        var def = NpcManager.Instance.GetById(DialogueRunner.Instance.CurrentNpcId);
+        if (def == null)
+            return;
+
+        textColor = def.DialogueTextColor;
+        nameColor = def.DialogueNameColor;
     }
 
     public void ClearConversationLog()

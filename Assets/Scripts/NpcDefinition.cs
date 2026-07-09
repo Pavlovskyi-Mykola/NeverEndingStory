@@ -19,6 +19,12 @@ public class NpcDefinition : ScriptableObject
     [Tooltip("Played when no rule resolves a graph.")]
     public DialogueGraph DialogueFallback;
 
+    [Header("Dialogue Text Colors")]
+    [Tooltip("Color of this NPC's dialogue body text.")]
+    public Color DialogueTextColor = Color.white;
+    [Tooltip("Color of this NPC's speaker name in the dialogue log.")]
+    public Color DialogueNameColor = Color.white;
+
     // LEGACY — schedule merged into DialogueRules (per-rule Placement). Kept only
     // so old serialized data survives until the NPC Routing window migrates it.
     [HideInInspector]

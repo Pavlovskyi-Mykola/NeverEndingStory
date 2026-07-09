@@ -153,6 +153,23 @@ public class NpcManager : MonoBehaviour
         }
     }
 
+    public NpcDefinition GetById(string npcId)
+    {
+        if (string.IsNullOrWhiteSpace(npcId))
+            return null;
+
+        for (int i = 0; i < npcs.Count; i++)
+        {
+            var def = npcs[i];
+            if (def == null) continue;
+
+            if (string.Equals(def.NpcId, npcId, System.StringComparison.OrdinalIgnoreCase))
+                return def;
+        }
+
+        return null;
+    }
+
     public List<string> GetAllSpeakerIds()
     {
         var result = new List<string> { PlayerSpeakerId };

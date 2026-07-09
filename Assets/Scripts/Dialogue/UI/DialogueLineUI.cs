@@ -1,34 +1,34 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
 /// One rendered line in the dialogue history (speaker + body) with basic styling.
-/// Uses legacy UI Text (no TMP).
+/// NPC text/name colors come from the speaker's NpcDefinition and are passed in;
+/// player colors have no per-speaker asset, so they stay serialized here.
 /// </summary>
 public class DialogueLineUI : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private Text speakerText;
-    [SerializeField] private Text bodyText;
+    [SerializeField] private TMP_Text speakerText;
+    [SerializeField] private TMP_Text bodyText;
 
     [Header("Optional Layout")]
     [Tooltip("If assigned, will flip alignment left/right based on isPlayer.")]
     [SerializeField] private HorizontalLayoutGroup rowLayout;
 
-    [Tooltip("Optional bubble background.")]
-    [SerializeField] private Image bubbleImage;
-
-    [Header("Colors")]
-    [SerializeField] private Color npcTextColor = Color.white;
+    [Header("Player Colors")]
     [SerializeField] private Color playerTextColor = Color.white;
-    [SerializeField] private Color npcBubbleColor = new Color(0f, 0f, 0f, 0.35f);
-    [SerializeField] private Color playerBubbleColor = new Color(0f, 0f, 0f, 0.35f);
+    [SerializeField] private Color playerNameColor = Color.white;
 
     [Header("Speaker Formatting")]
     [SerializeField] private bool hideSpeakerWhenEmpty = true;
 
-    public void Setup(string speaker, string body, bool isPlayer)
+    public void Setup(string speaker, string body, bool isPlayer, Color npcTextColor, Color npcNameColor)
     {
+        Color textColor = isPlayer ? playerTextColor : npcTextColor;
+        Color nameColor = isPlayer ? playerNameColor : npcNameColor;
+
         if (speakerText != null)
         {
             bool hasSpeaker = !string.IsNullOrWhiteSpace(speaker);
@@ -40,18 +40,15 @@ public class DialogueLineUI : MonoBehaviour
             {
                 speakerText.gameObject.SetActive(true);
                 speakerText.text = speaker;
+                speakerText.color = nameColor;
             }
         }
 
         if (bodyText != null)
+        {
             bodyText.text = body;
-
-        var textColor = isPlayer ? playerTextColor : npcTextColor;
-        if (speakerText != null) speakerText.color = textColor;
-        if (bodyText != null) bodyText.color = textColor;
-
-        if (bubbleImage != null)
-            bubbleImage.color = isPlayer ? playerBubbleColor : npcBubbleColor;
+            bodyText.color = textColor;
+        }
 
         if (rowLayout != null)
             rowLayout.childAlignment = isPlayer ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
