@@ -67,7 +67,11 @@ public class InventoryManager : MonoBehaviour
                 if (string.IsNullOrWhiteSpace(e.itemId)) continue;
                 if (e.count <= 0) continue;
 
-                _items[e.itemId] = e.count;
+                int count = e.count;
+                if (TryGetDefinition(e.itemId, out var def) && !def.Stackable)
+                    count = 1;
+
+                _items[e.itemId] = count;
             }
         }
 
@@ -95,6 +99,18 @@ public class InventoryManager : MonoBehaviour
 
         _items.TryGetValue(itemId, out var oldCount);
         int newCount = oldCount + count;
+
+        if (TryGetDefinition(itemId, out var def) && !def.Stackable)
+        {
+            if (oldCount >= 1)
+            {
+                Debug.LogWarning($"[Inventory] Ignored add of non-stackable '{itemId}' (already owned)");
+                return;
+            }
+
+            newCount = 1;
+        }
+
         _items[itemId] = newCount;
 
         if (logChanges)

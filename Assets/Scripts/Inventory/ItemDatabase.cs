@@ -28,6 +28,9 @@ public class ItemDatabase : ScriptableObject
             if (item == null || !item.IsValid())
                 continue;
 
+            if (_byId.TryGetValue(item.ItemId, out var existing) && existing != item)
+                Debug.LogWarning($"[ItemDatabase] Duplicate ItemId '{item.ItemId}' on '{item.name}' and '{existing.name}' — '{item.name}' wins.", this);
+
             _byId[item.ItemId] = item;
         }
     }
