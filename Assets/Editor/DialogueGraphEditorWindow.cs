@@ -34,6 +34,11 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private string _selectedNodeId = null;
 
+    // Per-choice "conditions" foldout state in the inline Choice node view.
+    // Keyed by nodeId + choice index; transient UI state (safe to reset on reorder).
+    private readonly HashSet<string> _expandedChoices = new();
+    private static string ChoiceCondKey(string nodeId, int choiceIndex) => nodeId + ":" + choiceIndex;
+
     [SerializeField] private bool snapToGrid = false;
     [SerializeField] private float snapSize = 10f;
 
@@ -665,6 +670,7 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private void DrawChoiceNodeInline(SerializedProperty nodeProp)
     {
+        string nodeId = nodeProp.FindPropertyRelative("id").stringValue;
         var choicesProp = nodeProp.FindPropertyRelative("choices");
 
         GUILayout.Label($"Choices: {choicesProp.arraySize}", EditorStyles.miniBoldLabel);
@@ -735,6 +741,10 @@ public class DialogueGraphEditorWindow : EditorWindow
                     }
                 }
             }
+
+            // ---- Per-choice condition ("gated" option: visible/pickable only when it passes) ----
+            if (DrawChoiceConditionRow(ch, nodeId, i))
+                return; // toggled or structure changed → relayout next repaint
         }
 
         if (choicesProp.arraySize > maxShow)
@@ -753,6 +763,145 @@ public class DialogueGraphEditorWindow : EditorWindow
                 AutoEndDanglingChoiceLinks(nodeProp);
             }
         }
+    }
+
+    /// <summary>
+    /// Inline "gated option" editor for a single choice. Shows a one-line summary and an
+    /// expandable condition list. A choice with conditions is only shown/pickable at runtime
+    /// when they all pass (see DialogueRunner.BuildPresentedChoices) — no false branch needed.
+    /// Returns true when the node layout changed this frame (caller should bail and let it repaint).
+    /// </summary>
+    private bool DrawChoiceConditionRow(SerializedProperty choiceProp, string nodeId, int choiceIndex)
+    {
+        var condProp = choiceProp.FindPropertyRelative("conditions");
+        var allProp = condProp.FindPropertyRelative("all");
+        int condCount = allProp != null ? allProp.arraySize : 0;
+
+        string key = ChoiceCondKey(nodeId, choiceIndex);
+        bool expanded = _expandedChoices.Contains(key);
+
+        using (new GUILayout.HorizontalScope())
+        {
+            GUILayout.Space(24);
+
+            string summary;
+            if (condCount == 0) summary = "always shown";
+            else if (condCount == 1) summary = "🔒 " + SingleConditionLabel(allProp.GetArrayElementAtIndex(0));
+            else summary = $"🔒 {condCount} conditions (all must pass)";
+
+            var oldC = GUI.contentColor;
+            GUI.contentColor = condCount == 0
+                ? new Color(1f, 1f, 1f, 0.5f)
+                : new Color(0.95f, 0.85f, 0.4f);
+            GUILayout.Label(summary, EditorStyles.miniLabel);
+            GUI.contentColor = oldC;
+
+            GUILayout.FlexibleSpace();
+
+            if (GUILayout.Button(expanded ? "▾ if" : "▸ if", GUILayout.Width(42), GUILayout.Height(16)))
+            {
+                if (expanded) _expandedChoices.Remove(key);
+                else _expandedChoices.Add(key);
+                return true;
+            }
+        }
+
+        if (expanded)
+        {
+            using (new GUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                if (DrawConditionGroupInline(condProp))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Draws an editable DialogueConditionGroup (its 'all' list). Returns true if the
+    /// list structure changed (add/remove), so the caller can bail and relayout.</summary>
+    private bool DrawConditionGroupInline(SerializedProperty conditionGroupProp)
+    {
+        var allProp = conditionGroupProp.FindPropertyRelative("all");
+        if (allProp == null) return false;
+
+        for (int i = 0; i < allProp.arraySize; i++)
+        {
+            var c = allProp.GetArrayElementAtIndex(i);
+            var typeProp = c.FindPropertyRelative("type");
+
+            using (new GUILayout.HorizontalScope())
+            {
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(typeProp, GUIContent.none);
+                if (EditorGUI.EndChangeCheck()) ApplyModified();
+
+                if (GUILayout.Button("✕", GUILayout.Width(22), GUILayout.Height(18)))
+                {
+                    allProp.DeleteArrayElementAtIndex(i);
+                    ApplyModified();
+                    return true;
+                }
+            }
+
+            var type = (DialogueConditionType)typeProp.intValue;
+
+            float oldLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 100f;
+
+            EditorGUI.BeginChangeCheck();
+            switch (type)
+            {
+                case DialogueConditionType.TimeOfDayIs:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("timeOfDayValue"), new GUIContent("Time ="));
+                    break;
+
+                case DialogueConditionType.FlagIsTrue:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("flagId"), new GUIContent("Flag"));
+                    break;
+
+                default:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("intValue"), new GUIContent(ConditionValueLabel(type)));
+                    if (type == DialogueConditionType.RelationshipAtLeast)
+                        EditorGUILayout.PropertyField(c.FindPropertyRelative("npcId"), new GUIContent("NPC (blank=current)"));
+                    break;
+            }
+            if (EditorGUI.EndChangeCheck()) ApplyModified();
+
+            EditorGUIUtility.labelWidth = oldLabelWidth;
+
+            GUILayout.Space(3);
+        }
+
+        if (GUILayout.Button("＋ Condition", GUILayout.Height(18)))
+        {
+            int idx = allProp.arraySize;
+            allProp.InsertArrayElementAtIndex(idx);
+            var nc = allProp.GetArrayElementAtIndex(idx);
+            // Reset to a clean default (InsertArrayElementAtIndex clones the previous entry).
+            nc.FindPropertyRelative("type").intValue = 0;
+            nc.FindPropertyRelative("intValue").intValue = 0;
+            nc.FindPropertyRelative("flagId").stringValue = "";
+            nc.FindPropertyRelative("npcId").stringValue = "";
+            ApplyModified();
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string ConditionValueLabel(DialogueConditionType type)
+    {
+        return type switch
+        {
+            DialogueConditionType.MoneyAtLeast        => "Money ≥",
+            DialogueConditionType.InfluenceAtLeast    => "Influence ≥",
+            DialogueConditionType.StrategyAtLeast     => "Strategy ≥",
+            DialogueConditionType.NetworkingAtLeast   => "Networking ≥",
+            DialogueConditionType.ReputationAtLeast   => "Reputation ≥",
+            DialogueConditionType.RelationshipAtLeast => "Relationship ≥",
+            _                                         => "Value",
+        };
     }
 
     private void DrawBranchNodeInline(SerializedProperty nodeProp)
@@ -1575,6 +1724,7 @@ private void CompleteConnection(string targetNodeId)
         {
             case DialogueNodeType.Choice:
                 {
+                    string nodeId = nodeProp.FindPropertyRelative("id").stringValue;
                     var choicesProp = nodeProp.FindPropertyRelative("choices");
                     int count = choicesProp != null ? choicesProp.arraySize : 0;
 
@@ -1588,11 +1738,15 @@ private void CompleteConnection(string targetNodeId)
                     {
                         h += row + 2f;                 // choice row
 
-                        // If dangling link -> extra "Create End →" row
                         var ch = choicesProp.GetArrayElementAtIndex(i);
+
+                        // If dangling link -> extra "Create End →" row
                         var nextProp = ch.FindPropertyRelative("nextNodeId");
                         if (nextProp != null && string.IsNullOrEmpty(nextProp.stringValue))
                             h += row + 2f;
+
+                        // Per-choice condition summary row (+ expanded editor)
+                        h += GetChoiceConditionsHeight(ch, nodeId, i);
                     }
 
                     if (count > maxShow)
@@ -1614,6 +1768,34 @@ private void CompleteConnection(string targetNodeId)
             default:
                 return 140f;
         }
+    }
+
+    private float GetChoiceConditionsHeight(SerializedProperty choiceProp, string nodeId, int choiceIndex)
+    {
+        // Always-visible summary + toggle row.
+        float h = 20f;
+
+        if (_expandedChoices.Contains(ChoiceCondKey(nodeId, choiceIndex)))
+        {
+            h += 8f; // helpBox padding
+
+            var allProp = choiceProp.FindPropertyRelative("conditions").FindPropertyRelative("all");
+            int n = allProp != null ? allProp.arraySize : 0;
+
+            for (int i = 0; i < n; i++)
+            {
+                h += 22f + 20f + 3f; // type/remove row + value field + spacing
+
+                var type = (DialogueConditionType)allProp.GetArrayElementAtIndex(i)
+                    .FindPropertyRelative("type").intValue;
+                if (type == DialogueConditionType.RelationshipAtLeast)
+                    h += 20f; // extra npcId field
+            }
+
+            h += 22f; // "＋ Condition" button
+        }
+
+        return h;
     }
 
     private float GetNodeWidth(SerializedProperty nodeProp)
