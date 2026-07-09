@@ -19,66 +19,24 @@ public class NpcDefinition : ScriptableObject
     [Tooltip("Played when no rule resolves a graph.")]
     public DialogueGraph DialogueFallback;
 
-    [Header("Schedule")]
+    // LEGACY — schedule merged into DialogueRules (per-rule Placement). Kept only
+    // so old serialized data survives until the NPC Routing window migrates it.
+    [HideInInspector]
     public List<NpcScheduleEntry> Schedule = new List<NpcScheduleEntry>();
 
     [Header("Relationship (0 = use RelationshipManager defaults)")]
     [Tooltip("Points needed per level for this NPC — higher = harder to win over.")]
     public int RelationshipPointsPerLevel = 0;
     public int RelationshipMaxLevel = 0;
-
-    public bool TryGetScheduleForLocation(DayOfWeek day, TimeOfDay phase, SceneReference location, out NpcScheduleEntry entry)
-    {
-        entry = default;
-
-        if (location == null || !location.IsValid)
-            return false;
-
-        for (int i = 0; i < Schedule.Count; i++)
-        {
-            var e = Schedule[i];
-            if (e.Absent) continue;
-
-            if (!e.MatchesTime(day, phase))
-                continue;
-
-            if (!SceneRefEquals(e.LocationScene, location))
-                continue;
-
-            entry = e;
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool SceneRefEquals(SceneReference a, SceneReference b)
-    {
-        if (a == null || b == null) return false;
-        if (!a.IsValid || !b.IsValid) return false;
-        return a.SceneName == b.SceneName;
-    }
 }
 
+/// <summary>LEGACY — replaced by DialogueSelectorRule.placement. Only read by the migration in the NPC Routing window.</summary>
 [Serializable]
 public struct NpcScheduleEntry
 {
-    [Header("When")]
-    public DayOfWeekMask Days;     // reuse your existing masks
+    public DayOfWeekMask Days;
     public DayPhaseMask Phases;
-
-    [Header("Where")]
-    public SceneReference LocationScene;   // scene = location (your current model)
-    [SpawnPointKey]
-    public string SpawnPointKey;           // e.g. "Door", "Table01"
-
-    [Header("Optional")]
-    public bool Absent; // if true, NPC is forced absent even if LocationScene is set
-
-    public bool MatchesTime(DayOfWeek day, TimeOfDay phase)
-    {
-        bool dayOk = (Days & DayOfWeekMaskExtensions.From(day)) != 0;
-        bool phaseOk = (Phases & DayPhaseMaskExtensions.From(phase)) != 0;
-        return dayOk && phaseOk;
-    }
+    public SceneReference LocationScene;
+    public string SpawnPointKey;
+    public bool Absent;
 }

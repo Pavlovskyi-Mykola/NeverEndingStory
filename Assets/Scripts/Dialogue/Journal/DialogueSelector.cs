@@ -10,6 +10,64 @@ public static class DialogueSelector
         public int Index;
     }
 
+    // Tier ascending (Quest first), priority descending, authored order last.
+    // Shared by dialogue selection and placement resolution so "where the NPC
+    // stands" and "what they say" always agree on which rule wins.
+    private static readonly System.Comparison<Candidate> CandidateOrder = static (a, b) =>
+    {
+        int byTier = a.Tier.CompareTo(b.Tier);
+        if (byTier != 0) return byTier;
+
+        int byPriority = b.Rule.priority.CompareTo(a.Rule.priority);
+        if (byPriority != 0) return byPriority;
+
+        return a.Index.CompareTo(b.Index);
+    };
+
+    /// <summary>
+    /// Resolves where the NPC should be right now from its dialogue rules: the
+    /// highest-ranked eligible rule with a placement wins. Returns false when the
+    /// NPC should not be spawned anywhere (no placement rule matches, or the
+    /// winning rule is Hidden / has no valid location).
+    /// </summary>
+    public static bool TryResolvePlacement(NpcDefinition npc, DialogueSelectorContext ctx,
+        out SceneReference location, out string spawnPointKey)
+    {
+        location = null;
+        spawnPointKey = null;
+
+        if (npc == null || npc.DialogueRules == null || npc.DialogueRules.Count == 0)
+            return false;
+
+        var candidates = new List<Candidate>(npc.DialogueRules.Count);
+
+        for (int i = 0; i < npc.DialogueRules.Count; i++)
+        {
+            var rule = npc.DialogueRules[i];
+            if (rule == null || !rule.IsEligibleForPlacement(ctx))
+                continue;
+
+            candidates.Add(new Candidate { Rule = rule, Tier = rule.GetEffectiveTier(), Index = i });
+        }
+
+        if (candidates.Count == 0)
+            return false;
+
+        candidates.Sort(CandidateOrder);
+
+        var winner = candidates[0].Rule;
+
+        if (winner.placement != NpcPlacement.AtLocation)
+            return false; // Hidden — explicitly absent
+
+        if (winner.locationScene == null || !winner.locationScene.IsValid)
+            return false;
+
+        location = winner.locationScene;
+        spawnPointKey = winner.spawnPointKey;
+        return true;
+    }
+
     /// <summary>Primary entry: routing lives inline on NpcDefinition.</summary>
     public static DialogueGraph Select(NpcDefinition npc, DialogueSelectorContext ctx)
     {
@@ -38,16 +96,7 @@ public static class DialogueSelector
                 candidates.Add(new Candidate { Rule = rule, Tier = rule.GetEffectiveTier(), Index = i });
             }
 
-            candidates.Sort(static (a, b) =>
-            {
-                int byTier = a.Tier.CompareTo(b.Tier);
-                if (byTier != 0) return byTier;
-
-                int byPriority = b.Rule.priority.CompareTo(a.Rule.priority);
-                if (byPriority != 0) return byPriority;
-
-                return a.Index.CompareTo(b.Index);
-            });
+            candidates.Sort(CandidateOrder);
 
             for (int i = 0; i < candidates.Count; i++)
             {

@@ -35,6 +35,10 @@ public class NpcManager : MonoBehaviour
         TimeManager.InstanceReady += HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             HandleTimeManagerReady(TimeManager.Instance);
+
+        QuestManager.InstanceReady += HandleQuestManagerReady;
+        if (QuestManager.Instance != null)
+            HandleQuestManagerReady(QuestManager.Instance);
     }
 
     private void OnDisable()
@@ -46,6 +50,10 @@ public class NpcManager : MonoBehaviour
         TimeManager.InstanceReady -= HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+
+        QuestManager.InstanceReady -= HandleQuestManagerReady;
+        if (QuestManager.Instance != null)
+            QuestManager.Instance.OnQuestStateChanged -= HandleQuestStateChanged;
     }
 
     private void HandleGameManagerReady(GameManager gm)
@@ -88,14 +96,29 @@ public class NpcManager : MonoBehaviour
         RefreshAll();
     }
 
+    private void HandleQuestManagerReady(QuestManager qm)
+    {
+        // avoid double subscribe
+        qm.OnQuestStateChanged -= HandleQuestStateChanged;
+        qm.OnQuestStateChanged += HandleQuestStateChanged;
+    }
+
+    private void HandleQuestStateChanged()
+    {
+        // Placement rules can be quest-gated (NPC moves/disappears during a
+        // quest), so presence must re-resolve when quest state changes too.
+        if (_activeSpawner == null) return;
+
+        RefreshAll();
+    }
+
     public void RefreshAll()
     {
         if (TimeManager.Instance == null) return;
         if (_activeSpawner == null) return;
         if (_currentLocation == null || !_currentLocation.IsValid) return;
 
-        var day = TimeManager.Instance.DayOfWeek;
-        var phase = TimeManager.Instance.TimeOfDay;
+        string locationId = _currentLocation.SceneName;
 
         for (int i = 0; i < npcs.Count; i++)
         {
@@ -108,25 +131,24 @@ public class NpcManager : MonoBehaviour
                 continue;
             }
 
-            // ✅ Only ask: "Is this NPC scheduled to be HERE right now?"
-            if (!def.TryGetScheduleForLocation(day, phase, _currentLocation, out var entry))
+            // Presence is derived from the same rules that route dialogue: the
+            // winning placement rule decides where (and whether) the NPC stands.
+            var ctx = DialogueSelectorContext.From(def.NpcId, locationId);
+
+            if (!DialogueSelector.TryResolvePlacement(def, ctx, out var location, out var spawnPointKey) ||
+                !string.Equals(location.SceneName, locationId, System.StringComparison.OrdinalIgnoreCase))
             {
                 _activeSpawner.Despawn(def.NpcId);
                 continue;
             }
 
-            var instance = _activeSpawner.EnsureSpawned(def.NpcId, def.Prefab, entry.SpawnPointKey);
+            var instance = _activeSpawner.EnsureSpawned(def.NpcId, def.Prefab, spawnPointKey);
 
             if (instance != null)
             {
                 var launcher = instance.GetComponent<NpcDialogueLauncher>();
                 if (launcher != null)
-                {
-                    // locationId: use SceneReference guid/name/key, whatever your selector expects
-                    string locationId = _currentLocation != null ? _currentLocation.SceneName : null;
-
                     launcher.Init(def.NpcId, locationId, def);
-                }
             }
         }
     }

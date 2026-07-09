@@ -37,11 +37,28 @@ public enum DialogueRuleTier
 }
 
 /// <summary>
+/// How a rule affects the NPC's physical presence in the world. Placement and
+/// dialogue share one rule so the conversation can never be authored for a
+/// time/place the NPC isn't actually standing in.
+/// </summary>
+public enum NpcPlacement
+{
+    /// <summary>Dialogue-only rule: plays wherever the NPC happens to be. Never drives spawning.</summary>
+    WhereverNpcIs = 0,
+    /// <summary>Puts the NPC at LocationScene/SpawnPointKey during the rule's days+phases; the dialogue only plays there.</summary>
+    AtLocation = 1,
+    /// <summary>Forces the NPC absent during the rule's days+phases (e.g. gone during a quest). Plays no dialogue.</summary>
+    Hidden = 2
+}
+
+/// <summary>
 /// One routing rule: "under this coarse world state, play this conversation."
 /// Scope is deliberately limited to SELECTION between whole conversations
 /// (quest state, relationship tier, seen/unseen, time/place). Fine-grained,
 /// in-conversation logic (stat checks, flag branches) belongs in the graph's
 /// Branch nodes + DialogueConditions, not here — that duplication was removed.
+/// A rule with Placement = AtLocation also drives WHERE the NPC spawns, so
+/// presence and dialogue are always authored together.
 /// </summary>
 [Serializable]
 public class DialogueSelectorRule
@@ -62,10 +79,13 @@ public class DialogueSelectorRule
     public DialogueGraph[] pool;
     public DialoguePickMode pickMode = DialoguePickMode.Random;
 
-    [Header("World Gating")]
+    [Header("Where & When")]
+    [Tooltip("AtLocation: the NPC stands at Location Scene / Spawn Point during the days+phases below, and this dialogue only plays there. WhereverNpcIs: dialogue-only, plays at any location. Hidden: the NPC is absent during the window.")]
+    public NpcPlacement placement = NpcPlacement.WhereverNpcIs;
+    public SceneReference locationScene;
+    [SpawnPointKey] public string spawnPointKey;
     public DayPhaseMask allowedPhases = DayPhaseMask.All;
     public DayOfWeekMask allowedDays = DayOfWeekMask.All;
-    public string[] allowedLocationIds;
 
     [Header("Seen / Unseen Gating")]
     public bool requireNotSeenDialogue;
@@ -108,6 +128,10 @@ public class DialogueSelectorRule
 
     public bool IsEligible(DialogueSelectorContext ctx)
     {
+        // Hidden rules only remove the NPC from the world — they never speak.
+        if (placement == NpcPlacement.Hidden)
+            return false;
+
         var journal = DialogueJournal.Instance;
 
         if (!PassesPhase(ctx))
@@ -129,6 +153,25 @@ public class DialogueSelectorRule
             return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Eligibility for driving the NPC's presence (spawn/despawn). Same gates as
+    /// IsEligible except location — the rule's own placement decides the location.
+    /// WhereverNpcIs rules never drive presence.
+    /// </summary>
+    public bool IsEligibleForPlacement(DialogueSelectorContext ctx)
+    {
+        if (placement == NpcPlacement.WhereverNpcIs)
+            return false;
+
+        var journal = DialogueJournal.Instance;
+
+        return PassesPhase(ctx)
+            && PassesDay(ctx)
+            && PassesSeenChecks(journal)
+            && PassesQuestChecks(ctx)
+            && PassesRelationship(ctx);
     }
 
     public bool IsPoolGraphEligible(DialogueGraph candidate, DialogueSelectorContext ctx)
@@ -156,16 +199,15 @@ public class DialogueSelectorRule
 
     private bool PassesLocation(DialogueSelectorContext ctx)
     {
-        if (allowedLocationIds == null || allowedLocationIds.Length == 0)
+        // Only AtLocation rules are location-bound: the dialogue plays exactly
+        // where the rule places the NPC, never anywhere else.
+        if (placement != NpcPlacement.AtLocation)
             return true;
 
-        for (int i = 0; i < allowedLocationIds.Length; i++)
-        {
-            if (string.Equals(allowedLocationIds[i], ctx.LocationId, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
+        if (locationScene == null || !locationScene.IsValid)
+            return false;
 
-        return false;
+        return string.Equals(locationScene.SceneName, ctx.LocationId, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool PassesSeenChecks(DialogueJournal journal)

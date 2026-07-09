@@ -6,20 +6,30 @@ using UnityEngine;
 
 /// <summary>
 /// Draws a DialogueSelectorRule as a one-line summary (tier strip + what plays +
-/// which gates apply) that expands into grouped fields. With 30+ rules per NPC,
-/// the collapsed summaries are what keep the list scannable.
+/// where/when + which gates apply) that expands into grouped fields. With 30+
+/// rules per NPC, the collapsed summaries are what keep the list scannable.
+/// Placement (where the NPC stands) and dialogue live on the same rule, so the
+/// "Where &amp; When" section is drawn as one unit with day/phase toggle strips.
 /// </summary>
 [CustomPropertyDrawer(typeof(DialogueSelectorRule))]
 public class DialogueSelectorRuleDrawer : PropertyDrawer
 {
     private const float Pad = 2f;
     private const float SectionGap = 6f;
+    private const float ToggleRowH = 22f;
     private static float Line => EditorGUIUtility.singleLineHeight;
+
+    private static readonly string[] DayLabels   = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    private static readonly int[]    DayBits     = { 1, 2, 4, 8, 16, 32, 64 };   // DayOfWeekMask values
+    private static readonly string[] PhaseLabels = { "Morning", "Afternoon", "Evening", "Night" };
+    private static readonly int[]    PhaseBits   = { 1, 2, 4, 8 };               // DayPhaseMask values
+
+    private static readonly Color ColSelected   = new Color(0.25f, 0.60f, 1.00f, 1f);
+    private static readonly Color ColDeselected = new Color(0.30f, 0.30f, 0.30f, 1f);
 
     // Field names drawn in expanded mode, in order, with contextual skips.
     private static readonly string[] GateFields =
     {
-        "allowedPhases", "allowedDays", "allowedLocationIds",
         "requireNotSeenDialogue", "requireNotSeenThis", "requireSeenThis",
         "requiredQuestId", "requiredQuestState", "requiredQuestStepId", "requiredQuestStepIndex",
         "requiredRelationshipLevel"
@@ -34,10 +44,21 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
         h += FieldH(property, "output") + FieldH(property, "tier") + FieldH(property, "priority");
         h += SectionGap;
 
-        if (IsPool(property))
-            h += FieldH(property, "pool") + FieldH(property, "pickMode");
-        else
-            h += FieldH(property, "graph");
+        if (Placement(property) != NpcPlacement.Hidden)
+        {
+            if (IsPool(property))
+                h += FieldH(property, "pool") + FieldH(property, "pickMode");
+            else
+                h += FieldH(property, "graph");
+
+            h += SectionGap;
+        }
+
+        // Where & When
+        h += FieldH(property, "placement");
+        if (Placement(property) == NpcPlacement.AtLocation)
+            h += FieldH(property, "locationScene") + FieldH(property, "spawnPointKey");
+        h += (ToggleRowH + Pad) * 2; // days + phases toggle strips
 
         h += SectionGap;
 
@@ -54,7 +75,6 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
         float y = position.y;
 
         // ── Header: tier strip + foldout with summary ──
-        var headerRect = new Rect(position.x, y, position.width, Line);
         EditorGUI.DrawRect(new Rect(position.x, y + 1, 3, Line - 2), TierColor(EffectiveTier(property)));
 
         var foldRect = new Rect(position.x + 8, y, position.width - 8, Line);
@@ -74,15 +94,37 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
         DrawField(ref content, property, "priority");
         content.y += SectionGap;
 
-        if (IsPool(property))
+        if (Placement(property) != NpcPlacement.Hidden)
         {
-            DrawField(ref content, property, "pool");
-            DrawField(ref content, property, "pickMode");
+            if (IsPool(property))
+            {
+                DrawField(ref content, property, "pool");
+                DrawField(ref content, property, "pickMode");
+            }
+            else
+            {
+                DrawField(ref content, property, "graph");
+            }
+
+            content.y += SectionGap;
         }
-        else
+
+        // ── Where & When ──
+        DrawField(ref content, property, "placement");
+
+        if (Placement(property) == NpcPlacement.AtLocation)
         {
-            DrawField(ref content, property, "graph");
+            DrawField(ref content, property, "locationScene");
+            DrawField(ref content, property, "spawnPointKey");
         }
+
+        DrawToggleButtons(new Rect(content.x, content.y, content.width, ToggleRowH),
+            property.FindPropertyRelative("allowedDays"), "Days", DayLabels, DayBits);
+        content.y += ToggleRowH + Pad;
+
+        DrawToggleButtons(new Rect(content.x, content.y, content.width, ToggleRowH),
+            property.FindPropertyRelative("allowedPhases"), "Phases", PhaseLabels, PhaseBits);
+        content.y += ToggleRowH + Pad;
 
         content.y += SectionGap;
 
@@ -112,10 +154,47 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
         cursor.y += h + Pad;
     }
 
+    private static void DrawToggleButtons(
+        Rect rowRect, SerializedProperty maskProp, string rowLabel,
+        string[] labels, int[] bits)
+    {
+        if (maskProp == null) return;
+
+        const float BtnH = 20f;
+        float labelW = 50f;
+        EditorGUI.LabelField(new Rect(rowRect.x, rowRect.y, labelW, rowRect.height), rowLabel);
+
+        float btnW = (rowRect.width - labelW) / labels.Length;
+        float bx = rowRect.x + labelW;
+        float by = rowRect.y + (rowRect.height - BtnH) * 0.5f;
+
+        int current = maskProp.intValue;
+
+        for (int i = 0; i < labels.Length; i++)
+        {
+            bool isOn = (current & bits[i]) != 0;
+            var btnRect = new Rect(bx + i * btnW + 1, by, btnW - 2, BtnH);
+
+            Color prev = GUI.backgroundColor;
+            GUI.backgroundColor = isOn ? ColSelected : ColDeselected;
+
+            if (GUI.Button(btnRect, labels[i]))
+                maskProp.intValue = isOn ? current & ~bits[i] : current | bits[i];
+
+            GUI.backgroundColor = prev;
+        }
+    }
+
     private static bool IsPool(SerializedProperty property)
     {
         var output = property.FindPropertyRelative("output");
         return output != null && output.intValue == (int)DialogueRuleOutput.Pool;
+    }
+
+    private static NpcPlacement Placement(SerializedProperty property)
+    {
+        var p = property.FindPropertyRelative("placement");
+        return p != null ? (NpcPlacement)p.intValue : NpcPlacement.WhereverNpcIs;
     }
 
     // -----------------------
@@ -157,8 +236,14 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
 
         sb.Append('[').Append(EffectiveTier(property)).Append("] ");
 
+        var placement = Placement(property);
+
         // What plays
-        if (IsPool(property))
+        if (placement == NpcPlacement.Hidden)
+        {
+            sb.Append("Hidden (NPC absent)");
+        }
+        else if (IsPool(property))
         {
             var pool = property.FindPropertyRelative("pool");
             int count = pool != null ? pool.arraySize : 0;
@@ -168,7 +253,22 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
         else
         {
             var graph = property.FindPropertyRelative("graph")?.objectReferenceValue;
-            sb.Append(graph != null ? graph.name : "⚠ no graph");
+            if (graph != null)
+                sb.Append(graph.name);
+            else
+                sb.Append(placement == NpcPlacement.AtLocation ? "presence only" : "⚠ no graph");
+        }
+
+        // Where
+        if (placement == NpcPlacement.AtLocation)
+        {
+            var sceneAsset = property.FindPropertyRelative("locationScene")?
+                .FindPropertyRelative("sceneAsset")?.objectReferenceValue;
+            string spawn = property.FindPropertyRelative("spawnPointKey")?.stringValue;
+
+            sb.Append("  @ ").Append(sceneAsset != null ? sceneAsset.name : "⚠ no location");
+            if (!string.IsNullOrWhiteSpace(spawn))
+                sb.Append(':').Append(spawn);
         }
 
         // Gates
@@ -196,9 +296,6 @@ public class DialogueSelectorRuleDrawer : PropertyDrawer
 
         var days = property.FindPropertyRelative("allowedDays");
         if (days != null && days.intValue != (int)DayOfWeekMask.All) gates.Add("days");
-
-        var locations = property.FindPropertyRelative("allowedLocationIds");
-        if (locations != null && locations.arraySize > 0) gates.Add($"loc({locations.arraySize})");
 
         if (gates.Count > 0)
             sb.Append("  ·  ").Append(string.Join(", ", gates));

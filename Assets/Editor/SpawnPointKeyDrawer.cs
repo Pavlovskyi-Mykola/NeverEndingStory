@@ -24,8 +24,9 @@ public class SpawnPointKeyDrawer : PropertyDrawer
             return;
         }
 
-        // We need to find the sibling field "LocationScene" from the same schedule entry
-        var locationSceneProp = FindSibling(property, "LocationScene");
+        // We need to find the sibling location field from the same entry
+        // ("locationScene" on DialogueSelectorRule, "LocationScene" on legacy schedule entries)
+        var locationSceneProp = FindSibling(property, "locationScene") ?? FindSibling(property, "LocationScene");
         if (locationSceneProp == null)
         {
             EditorGUI.PropertyField(position, property, label);
