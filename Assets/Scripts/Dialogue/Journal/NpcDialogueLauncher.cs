@@ -4,13 +4,13 @@ public class NpcDialogueLauncher : MonoBehaviour
 {
     private string _npcId;
     private string _locationId;
-    private DialogueRouteSet _routes;
+    private NpcDefinition _npc;
 
-    public void Init(string npcId, string locationId, DialogueRouteSet routes)
+    public void Init(string npcId, string locationId, NpcDefinition npc)
     {
         _npcId = npcId;
         _locationId = locationId;
-        _routes = routes;
+        _npc = npc;
     }
 
     public void TryStartDialogue()
@@ -24,10 +24,10 @@ public class NpcDialogueLauncher : MonoBehaviour
             return;
 
         if (DialogueRunner.Instance == null) return;
-        if (_routes == null) return;
+        if (_npc == null) return;
 
         var ctx = DialogueSelectorContext.From(_npcId, _locationId);
-        var graph = DialogueSelector.Select(_routes, ctx);
+        var graph = DialogueSelector.Select(_npc, ctx);
 
         if (graph == null)
         {

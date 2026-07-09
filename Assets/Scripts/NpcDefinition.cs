@@ -12,7 +12,12 @@ public class NpcDefinition : ScriptableObject
     [Header("Prefab")]
     public GameObject Prefab;         // visual instance for scenes
 
-    public DialogueRouteSet Routes;
+    [Header("Dialogue Routing")]
+    [Tooltip("Which conversation this NPC has, by world state. Eligible rules play by tier/priority; if none resolve, Dialogue Fallback plays. Keep rules to SELECTION between whole conversations — put in-conversation logic in the graph's Branch nodes.")]
+    public List<DialogueSelectorRule> DialogueRules = new();
+
+    [Tooltip("Played when no rule resolves a graph.")]
+    public DialogueGraph DialogueFallback;
 
     [Header("Schedule")]
     public List<NpcScheduleEntry> Schedule = new List<NpcScheduleEntry>();

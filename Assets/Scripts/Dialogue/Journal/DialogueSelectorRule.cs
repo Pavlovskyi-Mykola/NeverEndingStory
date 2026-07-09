@@ -36,6 +36,13 @@ public enum DialogueRuleTier
     SmallTalk = 4  // filler chatter, lowest priority
 }
 
+/// <summary>
+/// One routing rule: "under this coarse world state, play this conversation."
+/// Scope is deliberately limited to SELECTION between whole conversations
+/// (quest state, relationship tier, seen/unseen, time/place). Fine-grained,
+/// in-conversation logic (stat checks, flag branches) belongs in the graph's
+/// Branch nodes + DialogueConditions, not here — that duplication was removed.
+/// </summary>
 [Serializable]
 public class DialogueSelectorRule
 {
@@ -66,7 +73,7 @@ public class DialogueSelectorRule
     public DialogueGraph requireSeenThis;
 
     [Header("Quest Gating")]
-    public string requiredQuestId;
+    [QuestId] public string requiredQuestId;
     public QuestRouteState requiredQuestState = QuestRouteState.Any;
 
     [Tooltip("Optional. Only checked when Required Quest Id is set and the quest is active.")]
@@ -75,23 +82,9 @@ public class DialogueSelectorRule
     [Tooltip("Optional. Use -1 to ignore.")]
     public int requiredQuestStepIndex = -1;
 
-    [Header("Flags (optional)")]
-    [FlagId] public string requiredFlagId;
-    public bool requiredFlagValue = true;
-
     [Header("Relationship (optional)")]
-    [Tooltip("Minimum relationship level with THIS route set's NPC. 0 = ignored.")]
+    [Tooltip("Minimum relationship level with this NPC to select the rule. 0 = ignored.")]
     public int requiredRelationshipLevel = 0;
-
-    [Header("Stats (optional)")]
-    public int requiredMoney = 0;
-    public int requiredInfluence = 0;
-    public int requiredStrategy = 0;
-    public int requiredNetworking = 0;
-    public int requiredReputation = 0;
-
-    [Header("Optional graph-level conditions")]
-    public DialogueConditionGroup extraConditions;
 
     /// <summary>
     /// Tier used for ordering. Auto infers Quest only for rules gated on an
@@ -132,16 +125,7 @@ public class DialogueSelectorRule
         if (!PassesQuestChecks(ctx))
             return false;
 
-        if (!PassesFlagChecks(ctx))
-            return false;
-
         if (!PassesRelationship(ctx))
-            return false;
-
-        if (!PassesStatsChecks(ctx))
-            return false;
-
-        if (extraConditions != null && !extraConditions.Evaluate())
             return false;
 
         return true;
@@ -235,14 +219,6 @@ public class DialogueSelectorRule
         return true;
     }
 
-    private bool PassesFlagChecks(DialogueSelectorContext ctx)
-    {
-        if (string.IsNullOrWhiteSpace(requiredFlagId))
-            return true;
-
-        return ctx.CheckFlag(requiredFlagId, requiredFlagValue);
-    }
-
     private bool PassesRelationship(DialogueSelectorContext ctx)
     {
         if (requiredRelationshipLevel <= 0)
@@ -251,25 +227,5 @@ public class DialogueSelectorRule
         return RelationshipManager.Instance != null &&
                !string.IsNullOrEmpty(ctx.NpcId) &&
                RelationshipManager.Instance.GetLevel(ctx.NpcId) >= requiredRelationshipLevel;
-    }
-
-    private bool PassesStatsChecks(DialogueSelectorContext ctx)
-    {
-        if (ctx.Money < requiredMoney)
-            return false;
-
-        if (ctx.Influence < requiredInfluence)
-            return false;
-
-        if (ctx.Strategy < requiredStrategy)
-            return false;
-
-        if (ctx.Networking < requiredNetworking)
-            return false;
-
-        if (ctx.Reputation < requiredReputation)
-            return false;
-
-        return true;
     }
 }

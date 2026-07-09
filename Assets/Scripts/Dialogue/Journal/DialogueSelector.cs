@@ -10,22 +10,28 @@ public static class DialogueSelector
         public int Index;
     }
 
-    public static DialogueGraph Select(DialogueRouteSet routes, DialogueSelectorContext ctx)
+    /// <summary>Primary entry: routing lives inline on NpcDefinition.</summary>
+    public static DialogueGraph Select(NpcDefinition npc, DialogueSelectorContext ctx)
     {
-        if (routes == null)
+        if (npc == null)
             return null;
 
-        if (routes.rules != null && routes.rules.Count > 0)
+        return Select(npc.DialogueRules, npc.DialogueFallback, ctx);
+    }
+
+    public static DialogueGraph Select(IReadOnlyList<DialogueSelectorRule> rules, DialogueGraph fallback, DialogueSelectorContext ctx)
+    {
+        if (rules != null && rules.Count > 0)
         {
             // Eligibility first, then order by tier (Quest > Event > Routine >
             // SmallTalk), priority within a tier, and finally authored list
             // order — so an NPC's quest dialogue wins over their routine talk
             // and small talk no matter where it sits in the list.
-            var candidates = new List<Candidate>(routes.rules.Count);
+            var candidates = new List<Candidate>(rules.Count);
 
-            for (int i = 0; i < routes.rules.Count; i++)
+            for (int i = 0; i < rules.Count; i++)
             {
-                var rule = routes.rules[i];
+                var rule = rules[i];
                 if (rule == null || !rule.IsEligible(ctx))
                     continue;
 
@@ -53,7 +59,7 @@ public static class DialogueSelector
             }
         }
 
-        return routes.fallback;
+        return fallback;
     }
 
     private static DialogueGraph ResolveRule(DialogueSelectorRule rule, DialogueSelectorContext ctx)

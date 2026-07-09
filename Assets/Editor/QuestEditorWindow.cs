@@ -1090,16 +1090,27 @@ public class QuestEditorWindow : EditorWindow
         labels = new List<string> { "<None>" };
         values = new List<string> { "" };
         var npc = FindNpcById(npcId);
-        if (npc?.Routes == null) return;
+        if (npc == null) return;
+
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        AddGraph(npc.Routes.fallback, labels, values, seen);
-        if (npc.Routes.rules == null) return;
-        foreach (var rule in npc.Routes.rules)
+
+        AddGraph(npc.DialogueFallback, labels, values, seen);
+        AddRulesGraphs(npc.DialogueRules, labels, values, seen);
+    }
+
+    private static void AddRulesGraphs(IReadOnlyList<DialogueSelectorRule> rules,
+        List<string> labels, List<string> values, HashSet<string> seen)
+    {
+        if (rules == null) return;
+
+        for (int i = 0; i < rules.Count; i++)
         {
+            var rule = rules[i];
             if (rule == null) continue;
+
             AddGraph(rule.graph,              labels, values, seen);
-            AddGraph(rule.requireNotSeenThis,  labels, values, seen);
-            AddGraph(rule.requireSeenThis,     labels, values, seen);
+            AddGraph(rule.requireNotSeenThis, labels, values, seen);
+            AddGraph(rule.requireSeenThis,    labels, values, seen);
             if (rule.pool != null)
                 foreach (var g in rule.pool) AddGraph(g, labels, values, seen);
         }

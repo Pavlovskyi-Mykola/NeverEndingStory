@@ -124,9 +124,8 @@ public class NpcManager : MonoBehaviour
                 {
                     // locationId: use SceneReference guid/name/key, whatever your selector expects
                     string locationId = _currentLocation != null ? _currentLocation.SceneName : null;
-                    var routeSet = def.Routes;
 
-                    launcher.Init(def.NpcId, locationId, routeSet);
+                    launcher.Init(def.NpcId, locationId, def);
                 }
             }
         }
