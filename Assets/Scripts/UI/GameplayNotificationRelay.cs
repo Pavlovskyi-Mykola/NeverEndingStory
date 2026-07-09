@@ -12,8 +12,15 @@ using UnityEngine;
 /// </summary>
 public sealed class GameplayNotificationRelay : MonoBehaviour
 {
+    [Header("Stat toasts (per stat)")]
+    [Tooltip("Off by default: money deltas are animated at the HUD counter by StatDeltaFlyoutUI. Turn on only if that widget isn't in the scene.")]
+    [SerializeField] private bool notifyMoney = false;
+    [SerializeField] private bool notifyInfluence = true;
+    [SerializeField] private bool notifyStrategy = true;
+    [SerializeField] private bool notifyNetworking = true;
+    [SerializeField] private bool notifyReputation = true;
+
     [Header("Toggles")]
-    [SerializeField] private bool notifyStatChanges = true;
     [SerializeField] private bool notifyItemChanges = true;
     [SerializeField] private bool notifyPromotions = true;
     [SerializeField] private bool notifyTravelBlocked = true;
@@ -124,7 +131,7 @@ public sealed class GameplayNotificationRelay : MonoBehaviour
         {
             _statsDirty = false;
 
-            if (!suppressed && notifyStatChanges)
+            if (!suppressed)
                 PostStatDeltas(_baseline, _latest);
 
             _baseline = _latest;
@@ -151,25 +158,21 @@ public sealed class GameplayNotificationRelay : MonoBehaviour
     // Posting
     // -----------------------
 
-    private static void PostStatDeltas(in GameEvents.StatsSnapshot from, in GameEvents.StatsSnapshot to)
+    private void PostStatDeltas(in GameEvents.StatsSnapshot from, in GameEvents.StatsSnapshot to)
     {
-        PostStatDelta(StatType.Money, to.Money - from.Money);
-        PostStatDelta(StatType.Influence, to.Influence - from.Influence);
-        PostStatDelta(StatType.Strategy, to.Strategy - from.Strategy);
-        PostStatDelta(StatType.Networking, to.Networking - from.Networking);
-        PostStatDelta(StatType.Reputation, to.Reputation - from.Reputation);
+        PostStatDelta(StatType.Money, to.Money - from.Money, notifyMoney);
+        PostStatDelta(StatType.Influence, to.Influence - from.Influence, notifyInfluence);
+        PostStatDelta(StatType.Strategy, to.Strategy - from.Strategy, notifyStrategy);
+        PostStatDelta(StatType.Networking, to.Networking - from.Networking, notifyNetworking);
+        PostStatDelta(StatType.Reputation, to.Reputation - from.Reputation, notifyReputation);
     }
 
-    private static void PostStatDelta(StatType stat, int delta)
+    private static void PostStatDelta(StatType stat, int delta, bool enabled)
     {
-        if (delta == 0)
+        if (!enabled || delta == 0)
             return;
 
-        string text = stat == StatType.Money
-            ? (delta > 0 ? $"+${delta}" : $"-${-delta}")
-            : (delta > 0 ? $"+{delta} {stat}" : $"-{-delta} {stat}");
-
-        Notifications.Post(text, null, NotificationType.StatChange);
+        Notifications.Post(StatTypes.FormatDelta(stat, delta), null, NotificationType.StatChange);
     }
 
     private void PostItemDeltas()
