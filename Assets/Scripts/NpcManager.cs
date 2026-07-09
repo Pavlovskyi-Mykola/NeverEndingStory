@@ -177,6 +177,27 @@ public class NpcManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Resolves where this NPC currently is from its placement rules, independent of
+    /// the active scene (placement eligibility ignores the viewer's location). Returns
+    /// false when the NPC is placed nowhere right now — Hidden, or no eligible
+    /// AtLocation rule — which callers should treat as "busy / unavailable".
+    /// </summary>
+    public bool TryGetCurrentLocation(NpcDefinition def, out string sceneName)
+    {
+        sceneName = null;
+        if (def == null) return false;
+
+        string viewerLocation = _currentLocation != null ? _currentLocation.SceneName : string.Empty;
+        var ctx = DialogueSelectorContext.From(def.NpcId, viewerLocation);
+
+        if (!DialogueSelector.TryResolvePlacement(def, ctx, out var location, out _))
+            return false;
+
+        sceneName = location.SceneName;
+        return true;
+    }
+
     public NpcDefinition GetById(string npcId)
     {
         if (string.IsNullOrWhiteSpace(npcId))

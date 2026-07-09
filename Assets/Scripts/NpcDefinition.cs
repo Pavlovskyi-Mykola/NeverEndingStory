@@ -8,6 +8,8 @@ public class NpcDefinition : ScriptableObject
     [Header("Identity")]
     public string NpcId;              // unique, stable id (e.g. "npc_anna")
     public string DisplayName;        // shown name (e.g. "Anna")
+    [Tooltip("Portrait shown in UI — e.g. the phone Contacts app.")]
+    public Sprite Portrait;
 
     [Header("Prefab")]
     public GameObject Prefab;         // visual instance for scenes
