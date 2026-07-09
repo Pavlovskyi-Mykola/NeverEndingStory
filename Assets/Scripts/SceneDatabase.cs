@@ -92,6 +92,21 @@ public class SceneDatabase : ScriptableObject
     }
 
     /// <summary>
+    /// Player-facing name for a scene: the location's DisplayName when set,
+    /// otherwise the raw scene name (so unlisted/UI scenes still read sensibly).
+    /// </summary>
+    public string GetDisplayName(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName)) return sceneName;
+        if (_bySceneName == null) RebuildCache();
+
+        if (_bySceneName.TryGetValue(sceneName, out var entry) && !string.IsNullOrWhiteSpace(entry.DisplayName))
+            return entry.DisplayName;
+
+        return sceneName;
+    }
+
+    /// <summary>
     /// If a scene is not present in Locations list, we treat it as unrestricted
     /// (useful for UI/Bootstrap/MainMenu or any non-location scenes).
     ///
@@ -117,6 +132,8 @@ public class SceneDatabase : ScriptableObject
 public struct LocationEntry
 {
     public string Id;                 // optional: "home", "work_ff", etc.
+    [Tooltip("Player-facing name for this location (e.g. \"Café\", \"The Office\"). Falls back to the scene name when empty.")]
+    public string DisplayName;        // friendly name shown in UI
     public SceneReference Scene;
 
     [Header("Availability (Option A)")]

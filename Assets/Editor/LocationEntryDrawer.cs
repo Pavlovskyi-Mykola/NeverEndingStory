@@ -21,10 +21,12 @@ public class LocationEntryDrawer : PropertyDrawer
     public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
     {
         var idProp    = property.FindPropertyRelative("Id");
+        var nameProp  = property.FindPropertyRelative("DisplayName");
         var sceneProp = property.FindPropertyRelative("Scene");
         var itemsProp = property.FindPropertyRelative("RequiredItems");
 
         return EditorGUI.GetPropertyHeight(idProp,    true) + Pad
+             + EditorGUI.GetPropertyHeight(nameProp,  true) + Pad
              + EditorGUI.GetPropertyHeight(sceneProp, true) + Pad
              + RowH + Pad    // AllowedDays buttons
              + RowH + Pad    // AllowedPhases buttons
@@ -36,6 +38,7 @@ public class LocationEntryDrawer : PropertyDrawer
         EditorGUI.BeginProperty(position, label, property);
 
         var idProp     = property.FindPropertyRelative("Id");
+        var nameProp   = property.FindPropertyRelative("DisplayName");
         var sceneProp  = property.FindPropertyRelative("Scene");
         var daysProp   = property.FindPropertyRelative("AllowedDays");
         var phasesProp = property.FindPropertyRelative("AllowedPhases");
@@ -48,6 +51,10 @@ public class LocationEntryDrawer : PropertyDrawer
         float idH = EditorGUI.GetPropertyHeight(idProp, true);
         EditorGUI.PropertyField(new Rect(x, y, w, idH), idProp, true);
         y += idH + Pad;
+
+        float nameH = EditorGUI.GetPropertyHeight(nameProp, true);
+        EditorGUI.PropertyField(new Rect(x, y, w, nameH), nameProp, true);
+        y += nameH + Pad;
 
         float sceneH = EditorGUI.GetPropertyHeight(sceneProp, true);
         EditorGUI.PropertyField(new Rect(x, y, w, sceneH), sceneProp, true);

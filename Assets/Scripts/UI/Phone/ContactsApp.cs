@@ -44,9 +44,13 @@ public sealed class ContactsApp : MonoBehaviour
             if (def == null) continue;
 
             string displayName = string.IsNullOrWhiteSpace(def.DisplayName) ? def.NpcId : def.DisplayName;
-            string location = manager.TryGetCurrentLocation(def, out var sceneName) && !string.IsNullOrEmpty(sceneName)
-                ? sceneName
-                : busyLabel;
+
+            string location = busyLabel;
+            if (manager.TryGetCurrentLocation(def, out var sceneName) && !string.IsNullOrEmpty(sceneName))
+            {
+                var db = SceneDatabase.Instance;
+                location = db != null ? db.GetDisplayName(sceneName) : sceneName;
+            }
 
             var row = Instantiate(rowPrefab, contentRoot);
             row.Bind(def.Portrait, displayName, location);
