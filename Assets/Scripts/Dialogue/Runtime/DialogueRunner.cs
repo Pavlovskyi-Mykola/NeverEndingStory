@@ -370,9 +370,34 @@ public class DialogueRunner : MonoBehaviour
                     _waitingForClose = true;
                     _pendingCloseTraversalStartId = ln.NextNodeId;
                 }
+                else if (next.Kind == NextPeekKind.Choice)
+                {
+                    // NPC line flows straight into a choice node: present the line
+                    // and its choices in the same turn, with no Continue in between.
+                    var afterLine = TraverseExecuting(ln.NextNodeId, out var choiceEnd);
+
+                    if (choiceEnd != EndReason.End && afterLine is ChoiceNode cn)
+                    {
+                        _current = cn;
+
+                        // Journal: choice node visited
+                        if (!string.IsNullOrEmpty(_activeDialogueId))
+                            DialogueJournal.Instance?.GetOrCreateProgress(_activeDialogueId)?.MarkNodeVisited(cn.Id);
+
+                        turn.Action = DialogueTurnAction.Choices;
+                        _presentedChoices = BuildPresentedChoices(cn);
+                        turn.Choices = _presentedChoices;
+                    }
+                    else
+                    {
+                        // Peek saw a choice but the executing pass didn't land on one
+                        // (e.g. a branch flipped) — fall back to Continue.
+                        turn.Action = DialogueTurnAction.Continue;
+                    }
+                }
                 else
                 {
-                    // next is NPC line or choices -> user must "Continue"
+                    // next is another NPC line -> user must "Continue"
                     turn.Action = DialogueTurnAction.Continue;
                 }
             }
