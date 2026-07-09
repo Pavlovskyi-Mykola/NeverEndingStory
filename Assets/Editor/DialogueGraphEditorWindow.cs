@@ -39,6 +39,15 @@ public class DialogueGraphEditorWindow : EditorWindow
     private readonly HashSet<string> _expandedChoices = new();
     private static string ChoiceCondKey(string nodeId, int choiceIndex) => nodeId + ":" + choiceIndex;
 
+    // Content-measured node heights. Measured during the Repaint pass (GetLastRect is only
+    // valid then) and applied on the next frame, so every node auto-sizes to its content —
+    // long dialogue text and inline lists included.
+    private readonly Dictionary<string, float> _measuredNodeHeights = new();
+    private bool _nodeHeightsDirty;
+
+    // Left "Graph / Inspector" panel is collapsible, like the Dialogues list.
+    [SerializeField] private bool showLeftPanel = true;
+
     [SerializeField] private bool snapToGrid = false;
     [SerializeField] private float snapSize = 10f;
 
@@ -167,7 +176,8 @@ public class DialogueGraphEditorWindow : EditorWindow
         EditorGUILayout.BeginHorizontal();
         if (showGraphList)
             DrawGraphListPanel();
-        DrawLeftPanel();
+        if (showLeftPanel)
+            DrawLeftPanel();
         DrawCanvas();
         EditorGUILayout.EndHorizontal();
 
@@ -238,6 +248,7 @@ public class DialogueGraphEditorWindow : EditorWindow
         using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
         {
             showGraphList = GUILayout.Toggle(showGraphList, "Dialogues", EditorStyles.toolbarButton, GUILayout.Width(70));
+            showLeftPanel = GUILayout.Toggle(showLeftPanel, "Panel", EditorStyles.toolbarButton, GUILayout.Width(55));
 
             var newGraph = (DialogueGraph)EditorGUILayout.ObjectField(
                 _graph, typeof(DialogueGraph), false, GUILayout.Width(360));
@@ -437,6 +448,14 @@ public class DialogueGraphEditorWindow : EditorWindow
         }
         EndWindows();
 
+        // A node measured a new content height this frame — repaint so the taller/shorter
+        // window rect is applied on the next pass.
+        if (_nodeHeightsDirty)
+        {
+            _nodeHeightsDirty = false;
+            Repaint();
+        }
+
         // When a connection is pending, LMB on empty canvas opens "Create node" menu and auto-connects.
         if (_pending.IsActive &&
             Event.current.type == EventType.MouseDown &&
@@ -483,21 +502,13 @@ public class DialogueGraphEditorWindow : EditorWindow
         {
             Handles.color = new Color(1f, 1f, 1f, opacity);
 
-            // Offset so grid appears stable while panning
-            float xOff = scroll.x % step;
-            float yOff = scroll.y % step;
-
-            // Vertical lines
-            for (float x = -xOff; x < innerRect.width; x += step)
-            {
+            // Draw in absolute content coordinates so the grid is anchored to the nodes and
+            // pans together with them (no parallax between background and windows).
+            for (float x = 0f; x <= innerRect.width; x += step)
                 Handles.DrawLine(new Vector3(x, 0f), new Vector3(x, innerRect.height));
-            }
 
-            // Horizontal lines
-            for (float y = -yOff; y < innerRect.height; y += step)
-            {
+            for (float y = 0f; y <= innerRect.height; y += step)
                 Handles.DrawLine(new Vector3(0f, y), new Vector3(innerRect.width, y));
-            }
         }
 
         DrawStep(small, opacitySmall);
@@ -525,24 +536,19 @@ public class DialogueGraphEditorWindow : EditorWindow
             new Color(0, 0, 0, 0.25f)
         );
         HandleNodeSelection(nodeId, headerRect);
+        HandleNodeContextMenu(nodeId, headerRect);
 
-        GUILayout.Space(10);
+        GUILayout.Space(8);
 
-        // ---- your controls ----
+        // Input port (left). The "set as start" button lived here before — it's now on the
+        // header right-click menu and the Inspector, so it doesn't clutter every node.
         using (new GUILayout.HorizontalScope())
         {
             DrawInputPort(nodeProp);
             GUILayout.FlexibleSpace();
-
-            if (GUILayout.Button(new GUIContent("★", "Set as Start Node"),
-                GUILayout.Width(22), GUILayout.Height(18)))
-            {
-                _startNodeIdProp.stringValue = nodeId;
-                ApplyModified();
-            }
         }
 
-        GUILayout.Space(5);
+        GUILayout.Space(3);
 
         switch (GetNodeType(nodeProp))
         {
@@ -553,10 +559,49 @@ public class DialogueGraphEditorWindow : EditorWindow
             case DialogueNodeType.End: GUILayout.Label("(End)", EditorStyles.miniLabel); break;
         }
 
-        // Optional: make sure there IS clickable empty space at the bottom
-        GUILayout.FlexibleSpace();
+        // Measure actual content height so the window auto-sizes to fit (Repaint only —
+        // GetLastRect is not meaningful during the Layout pass). Applied next frame.
+        if (Event.current.type == EventType.Repaint)
+        {
+            float desired = GUILayoutUtility.GetLastRect().yMax + 12f;
+            if (!_measuredNodeHeights.TryGetValue(nodeId, out var prev) || Mathf.Abs(prev - desired) > 0.5f)
+            {
+                _measuredNodeHeights[nodeId] = desired;
+                _nodeHeightsDirty = true;
+            }
+        }
 
         GUI.DragWindow(headerRect);
+    }
+
+    private void HandleNodeContextMenu(string nodeId, Rect headerRect)
+    {
+        var e = Event.current;
+        if (e.type != EventType.MouseDown || e.button != 1) return;
+        if (!headerRect.Contains(e.mousePosition)) return;
+
+        string id = nodeId;
+        bool isStart = _startNodeIdProp != null && _startNodeIdProp.stringValue == id;
+
+        var menu = new GenericMenu();
+        if (isStart)
+            menu.AddDisabledItem(new GUIContent("★ Start Node (current)"));
+        else
+            menu.AddItem(new GUIContent("Set as Start Node"), false, () =>
+            {
+                _startNodeIdProp.stringValue = id;
+                ApplyModified();
+            });
+
+        menu.AddSeparator("");
+        menu.AddItem(new GUIContent("Delete Node"), false, () =>
+        {
+            _selectedNodeId = id;
+            DeleteSelectedNode();
+        });
+
+        menu.ShowAsContext();
+        e.Use();
     }
 
     private void HandleNodeSelection(string nodeId, Rect headerRect)
@@ -651,18 +696,34 @@ public class DialogueGraphEditorWindow : EditorWindow
             }
         }
 
-        // Text
+        // Text — grows with content so the whole dialogue line is visible without scrolling.
+        var textStyle = EditorStyles.textArea;
+        float textWidth = NodeWidth - 20f;
+        float textHeight = Mathf.Max(50f, textStyle.CalcHeight(new GUIContent(textProp.stringValue ?? ""), textWidth));
+
         EditorGUI.BeginChangeCheck();
-        string txt = EditorGUILayout.TextArea(textProp.stringValue ?? "", GUILayout.Height(50));
+        string txt = EditorGUILayout.TextArea(textProp.stringValue ?? "", textStyle, GUILayout.Height(textHeight));
         if (EditorGUI.EndChangeCheck())
         {
             textProp.stringValue = txt;
             ApplyModified();
         }
 
+        GUILayout.Space(4);
+
+        // On-enter commands — full inline editing, same as the side Inspector.
+        var onEnterProp = nodeProp.FindPropertyRelative("onEnterCommands");
+        if (onEnterProp != null)
+        {
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(onEnterProp, new GUIContent("On Enter"), true);
+            if (EditorGUI.EndChangeCheck())
+                ApplyModified();
+        }
+
         GUILayout.Space(6);
 
-        DrawOutputRow(nodeProp, "Next", "Next", nextProp.stringValue, () =>
+        DrawOutputRow(nodeProp, "", "Next", nextProp.stringValue, () =>
         {
             CreateEndAndConnect(nodeProp, "Next");
         });
@@ -798,7 +859,7 @@ public class DialogueGraphEditorWindow : EditorWindow
 
             GUILayout.FlexibleSpace();
 
-            if (GUILayout.Button(expanded ? "▾ if" : "▸ if", GUILayout.Width(42), GUILayout.Height(16)))
+            if (GUILayout.Button(expanded ? "▾ edit" : "▸ edit", GUILayout.Width(52), GUILayout.Height(16)))
             {
                 if (expanded) _expandedChoices.Remove(key);
                 else _expandedChoices.Add(key);
@@ -810,8 +871,21 @@ public class DialogueGraphEditorWindow : EditorWindow
         {
             using (new GUILayout.VerticalScope(EditorStyles.helpBox))
             {
+                GUILayout.Label("Show only if (all pass):", EditorStyles.miniLabel);
                 if (DrawConditionGroupInline(condProp))
                     return true;
+
+                GUILayout.Space(4);
+
+                // On-choose commands — parity with the side Inspector's full choice editing.
+                var onChooseProp = choiceProp.FindPropertyRelative("onChooseCommands");
+                if (onChooseProp != null)
+                {
+                    EditorGUI.BeginChangeCheck();
+                    EditorGUILayout.PropertyField(onChooseProp, new GUIContent("On Choose"), true);
+                    if (EditorGUI.EndChangeCheck())
+                        ApplyModified();
+                }
             }
         }
 
@@ -910,14 +984,12 @@ public class DialogueGraphEditorWindow : EditorWindow
         var fProp    = nodeProp.FindPropertyRelative("falseNextNodeId");
         var condProp = nodeProp.FindPropertyRelative("condition");
 
-        // Show a one-line condition summary so the node is readable without opening the inspector
-        if (condProp != null)
+        // Full inline condition editing (all must pass), same editor the choices use.
+        GUILayout.Label("If (all must pass):", EditorStyles.miniBoldLabel);
+        using (new GUILayout.VerticalScope(EditorStyles.helpBox))
         {
-            string summary = BuildConditionSummary(condProp);
-            var oldC = GUI.contentColor;
-            GUI.contentColor = new Color(0.85f, 0.85f, 0.60f);
-            GUILayout.Label(summary, EditorStyles.miniLabel);
-            GUI.contentColor = oldC;
+            if (condProp != null)
+                DrawConditionGroupInline(condProp);
         }
 
         GUILayout.Space(4);
@@ -931,19 +1003,6 @@ public class DialogueGraphEditorWindow : EditorWindow
         {
             CreateEndAndConnect(nodeProp, "False");
         });
-    }
-
-    private static string BuildConditionSummary(SerializedProperty condProp)
-    {
-        // condProp is a DialogueConditionGroup (has 'all' list inside)
-        var allProp = condProp.FindPropertyRelative("all");
-        if (allProp == null || allProp.arraySize == 0)
-            return "if: <no condition set>";
-
-        if (allProp.arraySize == 1)
-            return "if: " + SingleConditionLabel(allProp.GetArrayElementAtIndex(0));
-
-        return $"if: {allProp.arraySize} conditions (all must pass)";
     }
 
     private static string SingleConditionLabel(SerializedProperty c)
@@ -972,10 +1031,15 @@ public class DialogueGraphEditorWindow : EditorWindow
         var cmdsProp = nodeProp.FindPropertyRelative("commands");
         var nextProp = nodeProp.FindPropertyRelative("nextNodeId");
 
-        GUILayout.Label($"Commands: {cmdsProp.arraySize}", EditorStyles.miniBoldLabel);
+        // Full inline command editing, same as the side Inspector.
+        EditorGUI.BeginChangeCheck();
+        EditorGUILayout.PropertyField(cmdsProp, new GUIContent("Commands"), true);
+        if (EditorGUI.EndChangeCheck())
+            ApplyModified();
+
         GUILayout.Space(6);
 
-        DrawOutputRow(nodeProp, "Next", "Next", nextProp.stringValue, () =>
+        DrawOutputRow(nodeProp, "", "Next", nextProp.stringValue, () =>
         {
             CreateEndAndConnect(nodeProp, "Next");
         });
@@ -985,7 +1049,8 @@ public class DialogueGraphEditorWindow : EditorWindow
     {
         using (new GUILayout.HorizontalScope())
         {
-            GUILayout.Label(label, GUILayout.Width(45));
+            if (!string.IsNullOrEmpty(label))
+                GUILayout.Label(label, GUILayout.Width(45));
             GUILayout.FlexibleSpace();
 
             DrawOutputPort(nodeProp, portKey, currentTarget);
@@ -1062,6 +1127,22 @@ public class DialogueGraphEditorWindow : EditorWindow
         var type = GetNodeType(nodeProp);
 
         EditorGUILayout.LabelField(GetNodeTitle(nodeProp), EditorStyles.boldLabel);
+
+        // Start-node control (replaces the per-node ★ button).
+        string nodeIdForStart = nodeProp.FindPropertyRelative("id").stringValue;
+        bool isStart = _startNodeIdProp != null && _startNodeIdProp.stringValue == nodeIdForStart;
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            if (isStart)
+            {
+                GUILayout.Label("★ Start Node", EditorStyles.miniBoldLabel);
+            }
+            else if (GUILayout.Button("Set as Start Node", GUILayout.Height(18)))
+            {
+                _startNodeIdProp.stringValue = nodeIdForStart;
+                ApplyModified();
+            }
+        }
 
         EditorGUILayout.Space(6);
 
@@ -1195,7 +1276,16 @@ public class DialogueGraphEditorWindow : EditorWindow
         if (!TryGetPortWorld(srcId, portKey, out var a)) return;
         if (!TryGetPortWorld(dstId, "IN", out var b)) return;
 
-        DrawBezier(a, b, Color.white);
+        DrawBezier(a, b, ConnectionColor(portKey));
+    }
+
+    private static Color ConnectionColor(string portKey)
+    {
+        if (portKey == "True") return new Color(0.45f, 0.85f, 0.50f);
+        if (portKey == "False") return new Color(0.92f, 0.48f, 0.45f);
+        if (portKey != null && portKey.StartsWith("Choice:", StringComparison.Ordinal))
+            return new Color(0.55f, 0.78f, 0.98f);
+        return new Color(0.82f, 0.82f, 0.88f); // Next / default
     }
 
 
@@ -1211,9 +1301,39 @@ public class DialogueGraphEditorWindow : EditorWindow
 
     private static void DrawBezier(Vector2 a, Vector2 b, Color col)
     {
-        var ta = a + Vector2.right * 90f;  // output pushes right
-        var tb = b + Vector2.left * 90f;   // input pulls from left
+        // Tangents scale with horizontal distance so short links stay tight and long links
+        // curve gracefully instead of ballooning.
+        float tangent = Mathf.Clamp(Mathf.Abs(b.x - a.x) * 0.5f, 40f, 160f);
+        var ta = a + Vector2.right * tangent; // output pushes right
+        var tb = b + Vector2.left * tangent;  // input pulls from left
+
+        // Soft dark halo behind the line for depth/contrast against the grid.
+        Handles.DrawBezier(a, b, ta, tb, new Color(0f, 0f, 0f, 0.35f), null, 5.5f);
+        // Coloured line on top.
         Handles.DrawBezier(a, b, ta, tb, col, null, 3f);
+
+        // Arrowhead at the target input, pointing into the node.
+        DrawArrowHead(b, Vector2.right, col);
+    }
+
+    private static void DrawArrowHead(Vector2 tip, Vector2 dir, Color col)
+    {
+        dir = dir.sqrMagnitude < 1e-4f ? Vector2.right : dir.normalized;
+        Vector2 perp = new Vector2(-dir.y, dir.x);
+        const float size = 8f;
+        Vector2 back = tip - dir * size;
+
+        var tri = new[]
+        {
+            (Vector3)tip,
+            (Vector3)(back + perp * (size * 0.55f)),
+            (Vector3)(back - perp * (size * 0.55f)),
+        };
+
+        var old = Handles.color;
+        Handles.color = col;
+        Handles.DrawAAConvexPolygon(tri);
+        Handles.color = old;
     }
 
     // ---------------- Create / Delete / Connect ----------------
@@ -1637,6 +1757,10 @@ private void CompleteConnection(string targetNodeId)
         _selectedNodeId = null;
         _pending = default;
 
+        // Per-graph transient UI state — don't let it bleed across graphs.
+        _measuredNodeHeights.Clear();
+        _expandedChoices.Clear();
+
         if (_graph != null)
         {
             _graphSO = new SerializedObject(_graph);
@@ -1715,6 +1839,12 @@ private void CompleteConnection(string targetNodeId)
 
     private float GetNodeHeight(SerializedProperty nodeProp)
     {
+        // Prefer the real measured content height (see DrawNodeWindow). The per-type values
+        // below are only first-frame estimates before a node has been drawn once.
+        string measuredId = nodeProp.FindPropertyRelative("id").stringValue;
+        if (_measuredNodeHeights.TryGetValue(measuredId, out var measured))
+            return measured;
+
         var type = GetNodeType(nodeProp);
 
         // Base padding + header
