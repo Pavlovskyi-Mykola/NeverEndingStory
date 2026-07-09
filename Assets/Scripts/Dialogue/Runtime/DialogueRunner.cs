@@ -122,7 +122,7 @@ public class DialogueRunner : MonoBehaviour
         }
 
         // ---- Journal start ----
-        _activeDialogueId = !string.IsNullOrEmpty(_graph.DialogueId)? _graph.DialogueId: _graph.name; // fallback so quests/journal still work 
+        _activeDialogueId = _graph.EffectiveDialogueId; // name-fallback so quests/journal still work
         _hasStartedJournal = false;
 
         var journal = DialogueJournal.Instance;

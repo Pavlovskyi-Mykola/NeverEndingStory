@@ -20,6 +20,13 @@ public class DialogueGraph : ScriptableObject
     private List<DialogueNode> nodes = new();
 
     public string DialogueId => dialogueId;
+
+    /// <summary>
+    /// Id used for journal marking and seen-gates. Falls back to the asset name
+    /// when the GUID hasn't been generated yet, so "mark seen" (runner) and
+    /// "has seen" (selector rules) can never disagree about the key.
+    /// </summary>
+    public string EffectiveDialogueId => string.IsNullOrEmpty(dialogueId) ? name : dialogueId;
     public string StartNodeId => startNodeId;
     public bool CountsAsRelationshipTalk => countsAsRelationshipTalk;
     public IReadOnlyList<DialogueNode> Nodes => nodes;

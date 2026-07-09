@@ -45,12 +45,17 @@ public static class NpcRoutingValidation
             return messages;
         }
 
-        int deadRules = 0, missingLocations = 0, hiddenWithGraph = 0;
+        int deadRules = 0, missingLocations = 0, hiddenWithGraph = 0, emptyMasks = 0;
 
         for (int i = 0; i < rules.Count; i++)
         {
             var rule = rules[i];
             if (rule == null) { deadRules++; continue; }
+
+            // Unity zeroes fields on list-added elements (initializers don't run),
+            // so a fresh rule can start with no days/phases — never eligible.
+            if (rule.allowedDays == 0 || rule.allowedPhases == 0)
+                emptyMasks++;
 
             bool hasOutput = rule.output == DialogueRuleOutput.Pool
                 ? rule.pool != null && rule.pool.Any(g => g != null)
@@ -73,6 +78,10 @@ public static class NpcRoutingValidation
                     break;
             }
         }
+
+        if (emptyMasks > 0)
+            messages.Add(new Message(MessageType.Warning,
+                $"{emptyMasks} rule(s) have no Days or no Phases selected — they can never match. (New rules start empty; toggle the buttons.)"));
 
         if (deadRules > 0)
             messages.Add(new Message(MessageType.Warning,

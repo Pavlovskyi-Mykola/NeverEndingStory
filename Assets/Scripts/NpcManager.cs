@@ -39,6 +39,10 @@ public class NpcManager : MonoBehaviour
         QuestManager.InstanceReady += HandleQuestManagerReady;
         if (QuestManager.Instance != null)
             HandleQuestManagerReady(QuestManager.Instance);
+
+        DialogueRunner.InstanceReady += HandleDialogueRunnerReady;
+        if (DialogueRunner.Instance != null)
+            HandleDialogueRunnerReady(DialogueRunner.Instance);
     }
 
     private void OnDisable()
@@ -54,6 +58,10 @@ public class NpcManager : MonoBehaviour
         QuestManager.InstanceReady -= HandleQuestManagerReady;
         if (QuestManager.Instance != null)
             QuestManager.Instance.OnQuestStateChanged -= HandleQuestStateChanged;
+
+        DialogueRunner.InstanceReady -= HandleDialogueRunnerReady;
+        if (DialogueRunner.Instance != null)
+            DialogueRunner.Instance.OnHideDialogue -= HandleDialogueFinished;
     }
 
     private void HandleGameManagerReady(GameManager gm)
@@ -101,6 +109,22 @@ public class NpcManager : MonoBehaviour
         // avoid double subscribe
         qm.OnQuestStateChanged -= HandleQuestStateChanged;
         qm.OnQuestStateChanged += HandleQuestStateChanged;
+    }
+
+    private void HandleDialogueRunnerReady(DialogueRunner runner)
+    {
+        // avoid double subscribe
+        runner.OnHideDialogue -= HandleDialogueFinished;
+        runner.OnHideDialogue += HandleDialogueFinished;
+    }
+
+    private void HandleDialogueFinished()
+    {
+        // A conversation just ended — a one-time rule may now be ineligible (seen),
+        // so re-resolve presence immediately instead of waiting for the next tick.
+        if (_activeSpawner == null) return;
+
+        RefreshAll();
     }
 
     private void HandleQuestStateChanged()

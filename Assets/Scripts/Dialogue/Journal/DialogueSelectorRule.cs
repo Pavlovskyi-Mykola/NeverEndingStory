@@ -181,7 +181,7 @@ public class DialogueSelectorRule
 
         var journal = DialogueJournal.Instance;
 
-        if (requireNotSeenDialogue && journal != null && journal.HasSeenDialogue(candidate.DialogueId))
+        if (requireNotSeenDialogue && journal != null && journal.HasSeenDialogue(candidate.EffectiveDialogueId))
             return false;
 
         return true;
@@ -212,10 +212,10 @@ public class DialogueSelectorRule
 
     private bool PassesSeenChecks(DialogueJournal journal)
     {
-        if (requireNotSeenDialogue && graph != null && journal != null && journal.HasSeenDialogue(graph.DialogueId))
+        if (requireNotSeenDialogue && graph != null && journal != null && journal.HasSeenDialogue(graph.EffectiveDialogueId))
             return false;
 
-        if (requireNotSeenThis != null && journal != null && journal.HasSeenDialogue(requireNotSeenThis.DialogueId))
+        if (requireNotSeenThis != null && journal != null && journal.HasSeenDialogue(requireNotSeenThis.EffectiveDialogueId))
             return false;
 
         if (requireSeenThis != null)
@@ -223,7 +223,7 @@ public class DialogueSelectorRule
             if (journal == null)
                 return false;
 
-            if (!journal.HasSeenDialogue(requireSeenThis.DialogueId))
+            if (!journal.HasSeenDialogue(requireSeenThis.EffectiveDialogueId))
                 return false;
         }
 
