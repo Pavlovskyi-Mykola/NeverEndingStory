@@ -24,6 +24,32 @@ public class DialogueLineUI : MonoBehaviour
     [Header("Speaker Formatting")]
     [SerializeField] private bool hideSpeakerWhenEmpty = true;
 
+    [Header("History Dimming")]
+    [Tooltip("Alpha applied to this line once a newer line appears, so the latest line stands out.")]
+    [SerializeField, Range(0f, 1f)] private float dimmedAlpha = 0.45f;
+
+    private CanvasGroup _canvasGroup;
+
+    private CanvasGroup CanvasGroup
+    {
+        get
+        {
+            if (_canvasGroup == null)
+            {
+                _canvasGroup = GetComponent<CanvasGroup>();
+                if (_canvasGroup == null)
+                    _canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+            return _canvasGroup;
+        }
+    }
+
+    /// <summary>Dims this line to <see cref="dimmedAlpha"/> (previous history) or restores it (current line).</summary>
+    public void SetDimmed(bool dimmed)
+    {
+        CanvasGroup.alpha = dimmed ? dimmedAlpha : 1f;
+    }
+
     public void Setup(string speaker, string body, bool isPlayer, Color npcTextColor, Color npcNameColor)
     {
         Color textColor = isPlayer ? playerTextColor : npcTextColor;

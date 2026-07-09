@@ -172,8 +172,13 @@ public class DialogueUI : MonoBehaviour
         if (!isPlayer)
             ResolveNpcColors(out npcTextColor, out npcNameColor);
 
+        // Fade the previous latest line into "history" so the new one stands out.
+        if (_spawnedLines.Count > 0)
+            _spawnedLines[_spawnedLines.Count - 1].SetDimmed(true);
+
         var line = Instantiate(linePrefab, conversationContent);
         line.Setup(speaker, text, isPlayer, npcTextColor, npcNameColor);
+        line.SetDimmed(false);
         _spawnedLines.Add(line);
 
         if (maxLines > 0 && _spawnedLines.Count > maxLines)
