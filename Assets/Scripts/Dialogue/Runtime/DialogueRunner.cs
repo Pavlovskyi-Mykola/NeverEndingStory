@@ -384,9 +384,21 @@ public class DialogueRunner : MonoBehaviour
                         if (!string.IsNullOrEmpty(_activeDialogueId))
                             DialogueJournal.Instance?.GetOrCreateProgress(_activeDialogueId)?.MarkNodeVisited(cn.Id);
 
-                        turn.Action = DialogueTurnAction.Choices;
                         _presentedChoices = BuildPresentedChoices(cn);
-                        turn.Choices = _presentedChoices;
+
+                        if (_presentedChoices.Count == 0)
+                        {
+                            // Options all gated out: show this line, then let the player close,
+                            // rather than presenting an empty (soft-locking) choice list.
+                            Debug.LogWarning($"[DialogueRunner] Choice node '{cn.Id}' has no eligible options after this line. Ending conversation.");
+                            turn.Action = DialogueTurnAction.Close;
+                            _waitingForClose = true;
+                        }
+                        else
+                        {
+                            turn.Action = DialogueTurnAction.Choices;
+                            turn.Choices = _presentedChoices;
+                        }
                     }
                     else
                     {
@@ -418,9 +430,18 @@ public class DialogueRunner : MonoBehaviour
         else if (first.NodeType == DialogueNodeType.Choice)
         {
             var cn = (ChoiceNode)first;
+            _presentedChoices = BuildPresentedChoices(cn);
+
+            if (_presentedChoices.Count == 0)
+            {
+                // Every option gated out — presenting zero buttons would soft-lock the player.
+                Debug.LogWarning($"[DialogueRunner] Choice node '{cn.Id}' has no eligible options (all gated out). Closing dialogue.");
+                EmitCloseTurn();
+                return;
+            }
+
             turn.HasNpcLine = false;
             turn.Action = DialogueTurnAction.Choices;
-            _presentedChoices = BuildPresentedChoices(cn);
             turn.Choices = _presentedChoices;
         }
         else

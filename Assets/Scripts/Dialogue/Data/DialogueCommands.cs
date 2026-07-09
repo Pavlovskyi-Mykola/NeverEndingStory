@@ -15,7 +15,10 @@ public enum DialogueCommandType
     RemoveItem,
     ConsumeItem,
     StartQuest,
-    AddRelationship
+    AddRelationship,
+    // Appended (values are serialized by index — only append, never reorder):
+    AdvanceQuest,
+    SleepToMorning
 }
 
 [Serializable]
@@ -109,6 +112,17 @@ public class DialogueCommand
                         RelationshipManager.Instance.AddPoints(npcId, amount); // amount may be negative
                     break;
                 }
+
+            case DialogueCommandType.AdvanceQuest:
+                // Advances the quest's current step; auto-completes when steps run out.
+                if (QuestManager.Instance != null && !string.IsNullOrWhiteSpace(questId))
+                    QuestManager.Instance.TryAdvanceQuest(questId);
+                break;
+
+            case DialogueCommandType.SleepToMorning:
+                if (TimeManager.Instance != null)
+                    TimeManager.Instance.SleepToMorning(TimeChangeSource.Dialogue);
+                break;
         }
     }
 }

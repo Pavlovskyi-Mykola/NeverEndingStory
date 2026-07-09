@@ -70,6 +70,7 @@ public class DialogueCommandDrawer : PropertyDrawer
                 break;
 
             case "AdvanceTimePhase":
+            case "SleepToMorning":
                 EditorGUI.LabelField(row, "No extra parameters");
                 break;
 
@@ -96,6 +97,7 @@ public class DialogueCommandDrawer : PropertyDrawer
                 break;
 
             case "StartQuest":
+            case "AdvanceQuest":
                 if (questIdProp != null)
                     DrawQuestPopup(row, questIdProp);
                 else

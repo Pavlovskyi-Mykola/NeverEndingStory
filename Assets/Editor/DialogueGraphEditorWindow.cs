@@ -931,11 +931,29 @@ public class DialogueGraphEditorWindow : EditorWindow
                     break;
 
                 case DialogueConditionType.FlagIsTrue:
-                    EditorGUILayout.PropertyField(c.FindPropertyRelative("flagId"), new GUIContent("Flag"));
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("flagId"), new GUIContent("Flag is TRUE"));
                     break;
 
-                default:
-                    EditorGUILayout.PropertyField(c.FindPropertyRelative("intValue"), new GUIContent(ConditionValueLabel(type)));
+                case DialogueConditionType.FlagIsFalse:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("flagId"), new GUIContent("Flag is FALSE"));
+                    break;
+
+                case DialogueConditionType.HasSeenDialogue:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("seenDialogue"), new GUIContent("Seen dialogue"));
+                    break;
+
+                case DialogueConditionType.QuestStateIs:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("questId"), new GUIContent("Quest"));
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("questState"), new GUIContent("State ="));
+                    break;
+
+                case DialogueConditionType.HasItem:
+                    EditorGUILayout.PropertyField(c.FindPropertyRelative("itemId"), new GUIContent("Item"));
+                    DrawComparisonAndValue(c, "Count");
+                    break;
+
+                default: // numeric stats + Relationship
+                    DrawComparisonAndValue(c, ConditionValueLabel(type));
                     if (type == DialogueConditionType.RelationshipAtLeast)
                         EditorGUILayout.PropertyField(c.FindPropertyRelative("npcId"), new GUIContent("NPC (blank=current)"));
                     break;
@@ -954,9 +972,14 @@ public class DialogueGraphEditorWindow : EditorWindow
             var nc = allProp.GetArrayElementAtIndex(idx);
             // Reset to a clean default (InsertArrayElementAtIndex clones the previous entry).
             nc.FindPropertyRelative("type").intValue = 0;
+            nc.FindPropertyRelative("comparison").enumValueIndex = 0; // AtLeast
             nc.FindPropertyRelative("intValue").intValue = 0;
             nc.FindPropertyRelative("flagId").stringValue = "";
             nc.FindPropertyRelative("npcId").stringValue = "";
+            nc.FindPropertyRelative("itemId").stringValue = "";
+            nc.FindPropertyRelative("questId").stringValue = "";
+            nc.FindPropertyRelative("questState").enumValueIndex = (int)QuestRouteState.Active;
+            nc.FindPropertyRelative("seenDialogue").objectReferenceValue = null;
             ApplyModified();
             return true;
         }
@@ -964,17 +987,46 @@ public class DialogueGraphEditorWindow : EditorWindow
         return false;
     }
 
+    // Operator popup order must match the DialogueComparison enum (AtLeast, AtMost, Equals).
+    private static readonly string[] ComparisonSymbols = { "≥", "≤", "=" };
+
+    private void DrawComparisonAndValue(SerializedProperty conditionProp, string label)
+    {
+        using (new GUILayout.HorizontalScope())
+        {
+            GUILayout.Label(label, GUILayout.Width(94));
+
+            var cmpProp = conditionProp.FindPropertyRelative("comparison");
+            int newCmp = EditorGUILayout.Popup(cmpProp.enumValueIndex, ComparisonSymbols, GUILayout.Width(40));
+            if (newCmp != cmpProp.enumValueIndex)
+                cmpProp.enumValueIndex = newCmp;
+
+            EditorGUILayout.PropertyField(conditionProp.FindPropertyRelative("intValue"), GUIContent.none);
+        }
+    }
+
     private static string ConditionValueLabel(DialogueConditionType type)
     {
         return type switch
         {
-            DialogueConditionType.MoneyAtLeast        => "Money ≥",
-            DialogueConditionType.InfluenceAtLeast    => "Influence ≥",
-            DialogueConditionType.StrategyAtLeast     => "Strategy ≥",
-            DialogueConditionType.NetworkingAtLeast   => "Networking ≥",
-            DialogueConditionType.ReputationAtLeast   => "Reputation ≥",
-            DialogueConditionType.RelationshipAtLeast => "Relationship ≥",
+            DialogueConditionType.MoneyAtLeast        => "Money",
+            DialogueConditionType.InfluenceAtLeast    => "Influence",
+            DialogueConditionType.StrategyAtLeast     => "Strategy",
+            DialogueConditionType.NetworkingAtLeast   => "Networking",
+            DialogueConditionType.ReputationAtLeast   => "Reputation",
+            DialogueConditionType.RelationshipAtLeast => "Relationship",
             _                                         => "Value",
+        };
+    }
+
+    private static string ComparisonSymbol(SerializedProperty comparisonProp)
+    {
+        if (comparisonProp == null) return "≥";
+        return comparisonProp.enumValueIndex switch
+        {
+            1 => "≤",
+            2 => "=",
+            _ => "≥",
         };
     }
 
@@ -1010,20 +1062,36 @@ public class DialogueGraphEditorWindow : EditorWindow
         var typeProp = c.FindPropertyRelative("type");
         if (typeProp == null) return "?";
         var type = (DialogueConditionType)typeProp.intValue;
+
         int intVal = c.FindPropertyRelative("intValue")?.intValue ?? 0;
-        return type switch
+        string op = ComparisonSymbol(c.FindPropertyRelative("comparison"));
+
+        switch (type)
         {
-            DialogueConditionType.MoneyAtLeast       => $"Money ≥ {intVal}",
-            DialogueConditionType.InfluenceAtLeast   => $"Influence ≥ {intVal}",
-            DialogueConditionType.StrategyAtLeast    => $"Strategy ≥ {intVal}",
-            DialogueConditionType.NetworkingAtLeast  => $"Networking ≥ {intVal}",
-            DialogueConditionType.ReputationAtLeast  => $"Reputation ≥ {intVal}",
-            DialogueConditionType.TimeOfDayIs        =>
-                $"Time = {(TimeOfDay)(c.FindPropertyRelative("timeOfDayValue")?.intValue ?? 0)}",
-            DialogueConditionType.FlagIsTrue         => $"Flag '{c.FindPropertyRelative("flagId")?.stringValue ?? "?"}' is true",
-            DialogueConditionType.RelationshipAtLeast => $"Relationship ≥ {intVal}",
-            _                                        => type.ToString()
-        };
+            case DialogueConditionType.MoneyAtLeast:        return $"Money {op} {intVal}";
+            case DialogueConditionType.InfluenceAtLeast:    return $"Influence {op} {intVal}";
+            case DialogueConditionType.StrategyAtLeast:     return $"Strategy {op} {intVal}";
+            case DialogueConditionType.NetworkingAtLeast:   return $"Networking {op} {intVal}";
+            case DialogueConditionType.ReputationAtLeast:   return $"Reputation {op} {intVal}";
+            case DialogueConditionType.RelationshipAtLeast: return $"Relationship {op} {intVal}";
+            case DialogueConditionType.TimeOfDayIs:
+                return $"Time = {(TimeOfDay)(c.FindPropertyRelative("timeOfDayValue")?.intValue ?? 0)}";
+            case DialogueConditionType.FlagIsTrue:
+                return $"Flag '{c.FindPropertyRelative("flagId")?.stringValue ?? "?"}' is true";
+            case DialogueConditionType.FlagIsFalse:
+                return $"Flag '{c.FindPropertyRelative("flagId")?.stringValue ?? "?"}' is false";
+            case DialogueConditionType.HasItem:
+                return $"Item '{c.FindPropertyRelative("itemId")?.stringValue ?? "?"}' {op} {intVal}";
+            case DialogueConditionType.QuestStateIs:
+                return $"Quest '{c.FindPropertyRelative("questId")?.stringValue ?? "?"}' is {(QuestRouteState)(c.FindPropertyRelative("questState")?.enumValueIndex ?? 0)}";
+            case DialogueConditionType.HasSeenDialogue:
+                {
+                    var g = c.FindPropertyRelative("seenDialogue")?.objectReferenceValue;
+                    return $"Seen '{(g != null ? g.name : "?")}'";
+                }
+            default:
+                return type.ToString();
+        }
     }
 
     private void DrawCommandNodeInline(SerializedProperty nodeProp)

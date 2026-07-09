@@ -177,7 +177,7 @@ public class DialogueUI : MonoBehaviour
             _spawnedLines[_spawnedLines.Count - 1].SetDimmed(true);
 
         var line = Instantiate(linePrefab, conversationContent);
-        line.Setup(speaker, text, isPlayer, npcTextColor, npcNameColor);
+        line.Setup(ResolveDisplayName(speaker), text, isPlayer, npcTextColor, npcNameColor);
         line.SetDimmed(false);
         _spawnedLines.Add(line);
 
@@ -192,6 +192,23 @@ public class DialogueUI : MonoBehaviour
 
         Canvas.ForceUpdateCanvases();
         conversationScroll.verticalNormalizedPosition = 0f;
+    }
+
+    // Speaker on a line is a stable id (e.g. "npc_anna"); the log should show the NPC's
+    // display name ("Anna"). "Player" and any custom/unknown speaker string pass through.
+    private string ResolveDisplayName(string speakerId)
+    {
+        if (string.IsNullOrWhiteSpace(speakerId))
+            return speakerId;
+
+        if (NpcManager.Instance != null)
+        {
+            var def = NpcManager.Instance.GetById(speakerId);
+            if (def != null && !string.IsNullOrWhiteSpace(def.DisplayName))
+                return def.DisplayName;
+        }
+
+        return speakerId;
     }
 
     // NPC dialogue colors live on the speaker's NpcDefinition — resolve them for
