@@ -4,25 +4,20 @@ using TMPro;
 
 public class PlayerStatsUI : MonoBehaviour
 {
-    [Header("Money (assign TMP or legacy — either works)")]
+    [Header("Money")]
     [SerializeField] private TMP_Text moneyTMP;
-    [SerializeField] private Text moneyLegacy;
 
     [Header("Influence")]
     [SerializeField] private TMP_Text influenceTMP;
-    [SerializeField] private Text influenceLegacy;
 
     [Header("Strategy")]
     [SerializeField] private TMP_Text strategyTMP;
-    [SerializeField] private Text strategyLegacy;
 
     [Header("Networking")]
     [SerializeField] private TMP_Text networkingTMP;
-    [SerializeField] private Text networkingLegacy;
 
     [Header("Reputation")]
     [SerializeField] private TMP_Text reputationTMP;
-    [SerializeField] private Text reputationLegacy;
 
     private void OnEnable()
     {
@@ -50,16 +45,15 @@ public class PlayerStatsUI : MonoBehaviour
         var stats = PlayerStatsManager.Instance;
         if (stats == null) return;
 
-        SetLabel(moneyTMP, moneyLegacy, $"Money: {stats.Money}");
-        SetLabel(influenceTMP, influenceLegacy, $"Influence: {stats.Influence}");
-        SetLabel(strategyTMP, strategyLegacy, $"Strategy: {stats.Strategy}");
-        SetLabel(networkingTMP, networkingLegacy, $"Networking: {stats.Networking}");
-        SetLabel(reputationTMP, reputationLegacy, $"Reputation: {stats.Reputation}");
+        SetLabel(moneyTMP, $"{stats.Money}");
+        SetLabel(influenceTMP, $"{stats.Influence}");
+        SetLabel(strategyTMP, $"{stats.Strategy}");
+        SetLabel(networkingTMP, $"{stats.Networking}");
+        SetLabel(reputationTMP, $"{stats.Reputation}");
     }
 
-    private static void SetLabel(TMP_Text tmp, Text legacy, string value)
+    private static void SetLabel(TMP_Text tmp, string value)
     {
         if (tmp != null) tmp.text = value;
-        if (legacy != null) legacy.text = value;
     }
 }
