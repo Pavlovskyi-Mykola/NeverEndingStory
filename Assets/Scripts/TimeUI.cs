@@ -1,16 +1,15 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
 public class TimeUI : MonoBehaviour
 {
-    [Header("Day of week label (assign TMP or legacy — either works)")]
+    [Header("Day of week label")]
     [SerializeField] private TMP_Text dayOfWeekTMP;
-    [SerializeField] private Text dayOfWeekLegacy;
 
-    [Header("Time of day label (assign TMP or legacy — either works)")]
+    [Header("Time of day label")]
     [SerializeField] private TMP_Text timeOfDayTMP;
-    [SerializeField] private Text timeOfDayLegacy;
 
     [Header("Phase Image UI")]
     [SerializeField] private Image timeOfDayImage;
@@ -19,6 +18,15 @@ public class TimeUI : MonoBehaviour
     [SerializeField] private Sprite eveningSprite;
     [SerializeField] private Sprite nightSprite;
 
+    [Header("Advance / Sleep button")]
+    [Tooltip("Single button that skips a phase during the day and sleeps to morning at night. " +
+             "Wire its OnClick to OnAdvanceOrSleepPressed().")]
+    [SerializeField] private Button actionButton;
+    [Tooltip("Optional label on the button; swaps between the skip and sleep captions.")]
+    [SerializeField] private TMP_Text actionButtonLabel;
+    [SerializeField] private string skipLabel = "Skip";
+    [SerializeField] private string sleepLabel = "Sleep";
+
     private void OnEnable()
     {
         // InstanceReady covers TimeManager waking up after us; the Instance check
@@ -26,6 +34,10 @@ public class TimeUI : MonoBehaviour
         TimeManager.InstanceReady += HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             HandleTimeManagerReady(TimeManager.Instance);
+
+        // The button is home-gated at night, so re-evaluate it whenever the player
+        // changes location.
+        GameEvents.LocationEntered += HandleLocationEntered;
     }
 
     private void OnDisable()
@@ -33,6 +45,8 @@ public class TimeUI : MonoBehaviour
         TimeManager.InstanceReady -= HandleTimeManagerReady;
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+
+        GameEvents.LocationEntered -= HandleLocationEntered;
     }
 
     private void HandleTimeManagerReady(TimeManager tm)
@@ -44,10 +58,12 @@ public class TimeUI : MonoBehaviour
         HandleTimeChanged(tm.DayOfWeek, tm.TimeOfDay);
     }
 
+    private void HandleLocationEntered(string sceneName) => RefreshActionButton();
+
     private void HandleTimeChanged(System.DayOfWeek day, TimeOfDay phase)
     {
-        SetLabel(dayOfWeekTMP, dayOfWeekLegacy, day.ToString());
-        SetLabel(timeOfDayTMP, timeOfDayLegacy, phase.ToString());
+        SetLabel(dayOfWeekTMP, day.ToString());
+        SetLabel(timeOfDayTMP, phase.ToString());
 
         if (timeOfDayImage != null)
         {
@@ -55,12 +71,41 @@ public class TimeUI : MonoBehaviour
             timeOfDayImage.enabled = sprite != null;
             timeOfDayImage.sprite = sprite;
         }
+
+        RefreshActionButton();
     }
 
-    private static void SetLabel(TMP_Text tmp, Text legacy, string value)
+    /// <summary>
+    /// Night turns the button into a Sleep action that only works at Home;
+    /// otherwise it's a plain phase skip that's always available.
+    /// </summary>
+    private void RefreshActionButton()
+    {
+        if (actionButton == null) return;
+
+        bool isNight = TimeManager.Instance != null &&
+                       TimeManager.Instance.TimeOfDay == TimeOfDay.Night;
+
+        actionButton.interactable = isNight ? IsAtHome() : true;
+        SetLabel(actionButtonLabel, isNight ? sleepLabel : skipLabel);
+    }
+
+    private static bool IsAtHome()
+    {
+        var gm = GameManager.Instance;
+        if (gm == null || gm.Scenes == null) return false;
+
+        var home = gm.Scenes.Home;
+        var current = gm.CurrentLocationRef;
+        if (home == null || !home.IsValid || current == null || !current.IsValid)
+            return false;
+
+        return string.Equals(current.SceneName, home.SceneName, StringComparison.Ordinal);
+    }
+
+    private static void SetLabel(TMP_Text tmp, string value)
     {
         if (tmp != null) tmp.text = value;
-        if (legacy != null) legacy.text = value;
     }
 
     private Sprite GetSpriteForPhase(TimeOfDay phase)
@@ -75,15 +120,24 @@ public class TimeUI : MonoBehaviour
         }
     }
 
-    public void AdvanceTimeButton()
+    /// <summary>
+    /// Single OnClick target for the action button: skips a phase during the day,
+    /// sleeps to morning at night (Home only). Wire the button's OnClick here.
+    /// </summary>
+    public void OnAdvanceOrSleepPressed()
     {
-        if (TimeManager.Instance == null) return;
-        TimeManager.Instance.AdvancePhase(TimeChangeSource.PlayerUI);
-    }
+        var tm = TimeManager.Instance;
+        if (tm == null) return;
 
-    public void SleepToMorningButton()
-    {
-        if (TimeManager.Instance == null) return;
-        TimeManager.Instance.SleepToMorning(TimeChangeSource.PlayerUI);
+        if (tm.TimeOfDay == TimeOfDay.Night)
+        {
+            // Button is non-interactable away from Home, but guard the direct call too.
+            if (!IsAtHome()) return;
+            tm.SleepToMorning(TimeChangeSource.PlayerUI);
+        }
+        else
+        {
+            tm.AdvancePhase(TimeChangeSource.PlayerUI);
+        }
     }
 }
