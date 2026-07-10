@@ -4,77 +4,56 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 
 /// <summary>
-/// Two-state phone widget for the HUD.
+/// Two-state phone widget for the HUD. One always-visible phone object that your
+/// animation moves between its docked corner spot and the screen centre:
 ///
-///   Corner  — the default: small, docked bottom-left, showing the time/date screen.
-///   Center  — opened: larger, centred, showing the apps screen.
+///   Corner  — the default: docked bottom-left. The phone body shows its base
+///             face (time/date), which lives permanently on the phone root.
+///   Center  — opened: moved up/centred, with the apps screen active on top.
 ///
-/// Tapping the phone while in Corner opens it (Corner → Center, apps screen).
-/// Escape, or a click outside the phone, while in Center returns it to Corner
-/// (Center → Corner, time/date screen).
+/// The opened state is a real <see cref="UIPanel"/> sitting ON the apps-screen
+/// child (active only while open). This component is a thin bridge: tap →
+/// panel.Open(); the panel's Opened/Closed events drive an optional Animator bool
+/// and the <see cref="onOpen"/>/<see cref="onClose"/> events your travel animation
+/// hooks into. Everything policy-shaped — gameplay blocking, Escape, exclusivity,
+/// click-outside-closes — is governed by the UIPanel's own inspector:
+/// set Blocks Gameplay / Close On Escape there, and for click-outside enable
+/// Blocks UI Behind and wire the manager's backdrop Button to
+/// UIPanelManager.CloseTopmost.
 ///
-/// The component only swaps which screen is shown, drives an optional Animator
-/// bool, and raises <see cref="onOpen"/>/<see cref="onClose"/> — hook your
-/// appear/disappear animations to those events (or animate off the Animator bool).
-/// It does not move or scale anything itself, so the visual transition is entirely
-/// yours to author. Keep that animation on the always-on phone root, not on the
-/// panel object, since the panel object deactivates the instant it closes.
+/// Because every close path (Escape, backdrop click, another exclusive panel,
+/// CloseAll) funnels through the panel's Closed event, the phone always animates
+/// back down no matter why it closed. The apps screen deactivating instantly on
+/// close reveals the base face while the phone slides down — intended.
 ///
-/// Block-system integration (assign <see cref="panel"/>):
-///   The centred phone is represented by a real <see cref="UIPanel"/> living on a
-///   child that is active only while open. Opening = panel.Open(), closing =
-///   panel.Close(); the component mirrors the panel's Opened/Closed events into its
-///   visuals, so an external force-close (layer exclusivity, CloseAll) stays in
-///   sync. Because it's a genuine UIPanel, gameplay blocking, Escape handling and
-///   "closed/blocked by other panels" are governed by the UIPanel inspector — set
-///   its Layer / Blocks Gameplay / Exclusive In Layer / Close On Escape there.
-///
-/// Self-managed fallback (no <see cref="panel"/> assigned):
-///   The phone still opens/closes visually and consumes Escape via
-///   UIPanelManager's interceptor stack, but does not block gameplay. Handy before
-///   the UIPanel is wired in the scene.
+/// Keep the Animator on this always-active phone root, not on the apps screen —
+/// that object deactivates the moment the close starts.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class PhonePanel : MonoBehaviour
 {
     public enum PhoneState { Corner, Center }
 
-    [Header("Panel-system integration")]
-    [Tooltip("UIPanel representing the OPENED (centred) phone. Put it on a child that is active only while open. " +
-             "Assign this to make the open phone a first-class panel — gameplay blocking, Escape, and exclusivity " +
-             "are then governed by that UIPanel's own inspector fields. Leave empty for the self-managed fallback.")]
+    [Header("Panel")]
+    [Tooltip("UIPanel ON the apps-screen child (active only while open). Gameplay blocking, Escape, exclusivity and click-outside (Blocks UI Behind + manager backdrop → CloseTopmost) are governed by its inspector.")]
     [SerializeField] private UIPanel panel;
 
-    [Header("Screens (swapped per state)")]
-    [Tooltip("Shown while docked in the corner — the current time/date screen.")]
-    [SerializeField] private GameObject cornerScreen;
-
-    [Tooltip("Shown while opened in the centre — the apps screen.")]
-    [SerializeField] private GameObject appsScreen;
-
     [Header("Interaction")]
-    [Tooltip("Button that opens the phone. Put it on the corner widget; clicking it while docked opens the phone. Optional — you can also call Open() yourself.")]
+    [Tooltip("Button that opens the phone — the tap area on the docked phone body. Optional; you can also call Open() yourself.")]
     [SerializeField] private Button tapToOpenButton;
 
-    [Tooltip("Full-screen raycast catcher enabled only while centred. Clicking it (outside the phone) closes the phone. Put a transparent Image with a Button on it, sitting behind the phone in the hierarchy. " +
-             "If you assign a UIPanel with Blocks UI Behind + the manager backdrop, you can skip this and wire that backdrop to UIPanelManager.CloseTopmost instead.")]
-    [SerializeField] private GameObject clickOutsideCatcher;
-
-    [Tooltip("Self-managed mode only: Escape closes the phone while centred. When a UIPanel is assigned, Escape is governed by that UIPanel's own Close On Escape instead.")]
-    [SerializeField] private bool closeOnEscape = true;
-
     [Header("Animation (optional)")]
-    [Tooltip("Animator driven on state changes. Leave empty to rely purely on the events below. Keep it on the always-on phone root.")]
+    [Tooltip("Animator driven on state changes — put it on this always-active phone root so the close animation isn't cut off. Leave empty to rely purely on the events below.")]
     [SerializeField] private Animator animator;
 
     [Tooltip("Bool parameter set true while centred, false while docked. Empty = don't touch the Animator.")]
     [SerializeField] private string openedBoolParam = "Opened";
 
     [Header("Events — attach your animations here")]
-    [Tooltip("Corner → Center. Play the phone's 'slide up / grow' (appear) animation.")]
+    [Tooltip("Corner → Center. Play the phone's 'move up to centre' animation.")]
     public UnityEvent onOpen;
 
-    [Tooltip("Center → Corner. Play the phone's 'shrink / dock' (disappear) animation.")]
+    [Tooltip("Center → Corner. Play the phone's 'return to corner' animation.")]
     public UnityEvent onClose;
 
     public PhoneState State { get; private set; } = PhoneState.Corner;
@@ -83,30 +62,22 @@ public sealed class PhonePanel : MonoBehaviour
     /// <summary>Raised after a state change is applied.</summary>
     public event Action<PhoneState> StateChanged;
 
-    private bool _escapeRegistered;
-
     private void Awake()
     {
+        if (panel == null)
+            Debug.LogWarning("[PhonePanel] No UIPanel assigned — the phone can't open. Put a UIPanel on the apps-screen child and assign it.", this);
+
         if (tapToOpenButton != null)
         {
             tapToOpenButton.onClick.RemoveListener(Open);
             tapToOpenButton.onClick.AddListener(Open);
         }
-
-        // If the click-outside catcher carries its own Button, auto-wire it so you
-        // only have to drop the object in — no manual OnClick hookup needed.
-        if (clickOutsideCatcher != null &&
-            clickOutsideCatcher.TryGetComponent<Button>(out var catcherButton))
-        {
-            catcherButton.onClick.RemoveListener(Close);
-            catcherButton.onClick.AddListener(Close);
-        }
     }
 
     private void OnEnable()
     {
-        // Panel mode: let the UIPanel drive our visuals so an external force-close
-        // (exclusivity / CloseAll) keeps the phone's screens and catcher in sync.
+        // The UIPanel drives our state, so an external force-close (Escape,
+        // backdrop click, exclusivity, CloseAll) also brings the phone back down.
         if (panel != null)
         {
             panel.Opened += HandlePanelOpened;
@@ -117,8 +88,7 @@ public sealed class PhonePanel : MonoBehaviour
     private void Start()
     {
         // Snap to the current state on load without firing open/close animations.
-        bool startOpen = panel != null ? panel.IsOpen : false;
-        ApplyState(startOpen ? PhoneState.Center : PhoneState.Corner, animate: false);
+        ApplyState(panel != null && panel.IsOpen ? PhoneState.Center : PhoneState.Corner, animate: false);
     }
 
     private void OnDisable()
@@ -128,19 +98,12 @@ public sealed class PhonePanel : MonoBehaviour
             panel.Opened -= HandlePanelOpened;
             panel.Closed -= HandlePanelClosed;
         }
-
-        // Never leave a dangling interceptor if the HUD is torn down while centred.
-        SetEscapeInterceptor(false);
     }
 
     private void OnDestroy()
     {
         if (tapToOpenButton != null)
             tapToOpenButton.onClick.RemoveListener(Open);
-
-        if (clickOutsideCatcher != null &&
-            clickOutsideCatcher.TryGetComponent<Button>(out var catcherButton))
-            catcherButton.onClick.RemoveListener(Close);
     }
 
     // -----------------------
@@ -150,35 +113,23 @@ public sealed class PhonePanel : MonoBehaviour
     /// <summary>Corner → Center. No-op if already centred.</summary>
     public void Open()
     {
-        // Panel mode: activating the panel fires Opened → HandlePanelOpened → visuals.
         if (panel != null)
-        {
-            panel.Open();
-            return;
-        }
-
-        if (State == PhoneState.Center) return;
-        ApplyState(PhoneState.Center, animate: true);
+            panel.Open(); // Opened event → HandlePanelOpened → state + animation
     }
 
     /// <summary>Center → Corner. No-op if already docked.</summary>
     public void Close()
     {
         if (panel != null)
-        {
             panel.Close();
-            return;
-        }
-
-        if (State == PhoneState.Corner) return;
-        ApplyState(PhoneState.Corner, animate: true);
     }
 
     public void Toggle()
     {
-        bool open = panel != null ? panel.IsOpen : State == PhoneState.Center;
-        if (open) Close();
-        else Open();
+        if (panel == null) return;
+
+        if (panel.IsOpen) panel.Close();
+        else panel.Open();
     }
 
     // -----------------------
@@ -197,20 +148,6 @@ public sealed class PhonePanel : MonoBehaviour
         State = next;
         bool centred = next == PhoneState.Center;
 
-        // Swap screens. The centred phone shows apps; the docked phone shows time/date.
-        if (appsScreen != null && appsScreen.activeSelf != centred)
-            appsScreen.SetActive(centred);
-        if (cornerScreen != null && cornerScreen.activeSelf == centred)
-            cornerScreen.SetActive(!centred);
-
-        // The catcher only exists to swallow outside clicks while centred.
-        if (clickOutsideCatcher != null && clickOutsideCatcher.activeSelf != centred)
-            clickOutsideCatcher.SetActive(centred);
-
-        // Self-managed Escape only — in panel mode the UIPanel/manager own Escape.
-        if (panel == null)
-            SetEscapeInterceptor(centred && closeOnEscape);
-
         if (animator != null && !string.IsNullOrEmpty(openedBoolParam))
             animator.SetBool(openedBoolParam, centred);
 
@@ -221,28 +158,5 @@ public sealed class PhonePanel : MonoBehaviour
         }
 
         StateChanged?.Invoke(next);
-    }
-
-    private void SetEscapeInterceptor(bool active)
-    {
-        var manager = UIPanelManager.Instance;
-        if (manager == null || active == _escapeRegistered)
-            return;
-
-        if (active)
-            manager.PushEscapeInterceptor(HandleEscape);
-        else
-            manager.RemoveEscapeInterceptor(HandleEscape);
-
-        _escapeRegistered = active;
-    }
-
-    private bool HandleEscape()
-    {
-        if (State != PhoneState.Center)
-            return false; // not our Escape to consume
-
-        Close();
-        return true; // consumed — don't let the manager close anything behind us
     }
 }
